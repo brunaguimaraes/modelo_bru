@@ -335,7 +335,8 @@ def emission_calc (year):
     -steel_production['Total'][year]*carbon_content*44/12/10**3)
     return emission
 
-Emission_Reference = emission_calc (2020)
+Emission_Reference = emission_calc (2020)      
+    
 #%%
 """Steel production Projection"""
 
@@ -649,7 +650,6 @@ R4 = Route Independet producers
     +Emission_mitigated_R4)()
 
 #Mitigação das rotas
-#Acho que tenho que fazer a mitigação por produção. Pq senão teria que estimar a produção sem medida de mitigação... mó trablaho
         
     EI_R1 = ((EC_R1_no_measure*sum(Energy_share_R1.loc[f][year]*emission_factor.loc[f]['CO2e'] for f in Energy_share_R1.index)/10**6)() - Emission_mitigated_R1())/production_R1()*1000
     EI_R2 = ((EC_R2_no_measure*sum(Energy_share_R2.loc[f][year]*emission_factor.loc[f]['CO2e'] for f in Energy_share_R2.index)/10**6)() - Emission_mitigated_R2())/production_R2()*1000
@@ -739,7 +739,7 @@ R4 = Route Independet producers
         
         
         
-    return model,capex_total,CE,mitigacao,opex_total
+    return model,capex_total,CE ,mitigacao , opex_total
 
 #%%
 """Future emissions, costs and energy consumption"""
@@ -821,8 +821,18 @@ for i in Emission_reduction:
                                                          -sum(mitigacao_df.loc[i, ( tecnologia, 'Gasto comb')] for tecnologia in primeiro_nivel if tecnologia != 'Eficiencia')
                                                          )
                                                        )
-#    Results[i]['Energy Consumption'] = y.sum()
-#    Results[i]['Fuel_saving'] = fuel_saving()
+
+emissoes_gas = pd.DataFrame(data = 0, index = ['CO2','CH4', 'N2O'], columns = CE_mit.columns)
+
+for year in CE_mit.columns:
+
+    co2 = sum (CE_mit[year][fuel]*emission_factor.loc[fuel]['CO2'] for fuel in CE_mit.index)/10**6-steel_production['Total'][year]*carbon_content*44/12/10**3
+    ch4 = sum(CE_mit[year][fuel]*emission_factor.loc[fuel]['CH4'] for fuel in CE_mit.index)/10**6
+    n2o = sum(CE_mit[year][fuel]*emission_factor.loc[fuel]['N2O'] for fuel in CE_mit.index)/10**6
+    
+    emissoes_gas[year]['CO2'] = co2
+    emissoes_gas[year]['CH4'] = ch4
+    emissoes_gas[year]['N2O'] = n2o
 
 #%%
 """Exporting values to excel"""
