@@ -825,17 +825,32 @@ for i in Emission_reduction:
                                                          )
                                                        )
 
-emissoes_gas = pd.DataFrame(data = 0, index = ['CO2','CH4', 'N2O'], columns = CE_mit.columns)
+lista_comb = [item for item in CE_mit.index if item != "Total"]
+lista_comb_processo = ['Coque de carvao mineral','Carvao vegetal','Carvao metalurgico']
+lista_comb_energia = [item for item in lista_comb if item not in lista_comb_processo]
+
+emissoes_gas_processo = pd.DataFrame(data = 0, index = ['CO2','CH4', 'N2O'], columns = CE_mit.columns)
+emissoes_gas_energia = pd.DataFrame(data = 0, index = ['CO2','CH4', 'N2O'], columns = CE_mit.columns)
 
 for year in CE_mit.columns:
 
-    co2 = sum (CE_mit[year][fuel]*emission_factor.loc[fuel]['CO2'] for fuel in CE_mit.index)/10**6-steel_production['Total'][year]*carbon_content*44/12/10**3
-    ch4 = sum(CE_mit[year][fuel]*emission_factor.loc[fuel]['CH4'] for fuel in CE_mit.index)/10**6
-    n2o = sum(CE_mit[year][fuel]*emission_factor.loc[fuel]['N2O'] for fuel in CE_mit.index)/10**6
+    co2 = sum (CE_mit[year][fuel]*emission_factor.loc[fuel]['CO2'] for fuel in emissoes_gas_processo)/10**6-steel_production['Total'][year]*carbon_content*44/12/10**3
+    ch4 = sum(CE_mit[year][fuel]*emission_factor.loc[fuel]['CH4'] for fuel in emissoes_gas_processo)/10**6
+    n2o = sum(CE_mit[year][fuel]*emission_factor.loc[fuel]['N2O'] for fuel in emissoes_gas_processo)/10**6
     
-    emissoes_gas[year]['CO2'] = co2
-    emissoes_gas[year]['CH4'] = ch4
-    emissoes_gas[year]['N2O'] = n2o
+    emissoes_gas_processo[year]['CO2'] = co2
+    emissoes_gas_processo[year]['CH4'] = ch4
+    emissoes_gas_processo[year]['N2O'] = n2o
+    
+for year in CE_mit.columns:
+
+    co2 = sum (CE_mit[year][fuel]*emission_factor.loc[fuel]['CO2'] for fuel in emissoes_gas_energia)/10**6
+    ch4 = sum (CE_mit[year][fuel]*emission_factor.loc[fuel]['CH4'] for fuel in emissoes_gas_energia)/10**6
+    n2o = sum (CE_mit[year][fuel]*emission_factor.loc[fuel]['N2O'] for fuel in emissoes_gas_energia)/10**6
+    
+    emissoes_gas_energia[year]['CO2'] = co2
+    emissoes_gas_energia[year]['CH4'] = ch4
+    emissoes_gas_energia[year]['N2O'] = n2o
 
 #%%
 """Exporting values to excel"""
