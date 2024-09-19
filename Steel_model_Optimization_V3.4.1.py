@@ -746,12 +746,12 @@ R4 = Route Independet producers
 #%%
 """Future emissions, costs and energy consumption"""
 # Criar os anos como índices
-anos = list(range(2023, 2050))
+anos = list(range(2023, 2051))
 
-Emission_reduction = pd.DataFrame(data = np.linspace(1,.5,27),index= anos)
+Emission_reduction = pd.DataFrame(data = np.linspace(1,.5,28),index= anos)
 Emission_reduction = Emission_reduction[0].to_dict()
 
-Emission_base = pd.DataFrame(data = np.linspace(1,1,27),index= anos)
+Emission_base = pd.DataFrame(data = np.linspace(1,1,28),index= anos)
 Emission_base = Emission_base[0].to_dict()
 
 Results = pd.DataFrame(columns = anos,index = [
@@ -834,9 +834,17 @@ emissoes_gas_energia = pd.DataFrame(data = 0, index = ['CO2','CH4', 'N2O'], colu
 
 for year in CE_mit.columns:
 
-    co2 = sum (CE_mit[year][fuel]*emission_factor.loc[fuel]['CO2'] for fuel in emissoes_gas_processo)/10**6-steel_production['Total'][year]*carbon_content*44/12/10**3
-    ch4 = sum(CE_mit[year][fuel]*emission_factor.loc[fuel]['CH4'] for fuel in emissoes_gas_processo)/10**6
-    n2o = sum(CE_mit[year][fuel]*emission_factor.loc[fuel]['N2O'] for fuel in emissoes_gas_processo)/10**6
+    co2 = (sum(CE_mit[year][fuel]*emission_factor.loc[fuel]['CO2'] for fuel in lista_comb_processo)/10**6
+           +Results.loc['GN'][year]*steel_production.loc[year]['Total']*innovation_measures.loc[0]['Energy_intensity (GJ/t)']*emission_factor.loc['Gas natural']['CO2']/10**6
+           -steel_production['Total'][year]*carbon_content*44/12/10**3
+           )
+    ch4 = (sum(CE_mit[year][fuel]*emission_factor.loc[fuel]['CH4'] for fuel in lista_comb_processo)/10**6
+           +Results.loc['GN'][year]*steel_production.loc[year]['Total']*innovation_measures.loc[0]['Energy_intensity (GJ/t)']*emission_factor.loc['Gas natural']['CH4']/10**6
+           )
+    
+    n2o = (sum(CE_mit[year][fuel]*emission_factor.loc[fuel]['N2O'] for fuel in lista_comb_processo)/10**6
+           +Results.loc['GN'][year]*steel_production.loc[year]['Total']*innovation_measures.loc[0]['Energy_intensity (GJ/t)']*emission_factor.loc['Gas natural']['N2O']/10**6
+           )
     
     emissoes_gas_processo[year]['CO2'] = co2
     emissoes_gas_processo[year]['CH4'] = ch4
@@ -844,9 +852,17 @@ for year in CE_mit.columns:
     
 for year in CE_mit.columns:
 
-    co2 = sum (CE_mit[year][fuel]*emission_factor.loc[fuel]['CO2'] for fuel in emissoes_gas_energia)/10**6
-    ch4 = sum (CE_mit[year][fuel]*emission_factor.loc[fuel]['CH4'] for fuel in emissoes_gas_energia)/10**6
-    n2o = sum (CE_mit[year][fuel]*emission_factor.loc[fuel]['N2O'] for fuel in emissoes_gas_energia)/10**6
+    co2 = (sum (CE_mit[year][fuel]*emission_factor.loc[fuel]['CO2'] for fuel in lista_comb_energia)/10**6
+           -Results.loc['GN'][year]*steel_production.loc[year]['Total']*innovation_measures.loc[0]['Energy_intensity (GJ/t)']*emission_factor.loc['Gas natural']['CO2']/10**6
+           )
+    
+    ch4 = (sum (CE_mit[year][fuel]*emission_factor.loc[fuel]['CH4'] for fuel in lista_comb_energia)/10**6
+           -Results.loc['GN'][year]*steel_production.loc[year]['Total']*innovation_measures.loc[0]['Energy_intensity (GJ/t)']*emission_factor.loc['Gas natural']['CH4']/10**6
+           )
+    
+    n2o = (sum (CE_mit[year][fuel]*emission_factor.loc[fuel]['N2O'] for fuel in lista_comb_energia)/10**6
+           -Results.loc['GN'][year]*steel_production.loc[year]['Total']*innovation_measures.loc[0]['Energy_intensity (GJ/t)']*emission_factor.loc['Gas natural']['N2O']/10**6
+           )
     
     emissoes_gas_energia[year]['CO2'] = co2
     emissoes_gas_energia[year]['CH4'] = ch4
