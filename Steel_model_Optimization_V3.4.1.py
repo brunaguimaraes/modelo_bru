@@ -771,8 +771,6 @@ segundo_nivel = ['Capex', 'Opex', 'Gasto comb', 'Mitigacao']
 # Criar um MultiIndex para as colunas
 colunas = pd.MultiIndex.from_product([primeiro_nivel, segundo_nivel])
 
-
-
 # Criar o DataFrame preenchido com zeros
 mitigacao_df = pd.DataFrame(0, index=anos, columns=colunas)
 
