@@ -822,6 +822,11 @@ for i in Emission_reduction:
                                                          -sum(mitigacao_df.loc[i, ( tecnologia, 'Gasto comb')] for tecnologia in primeiro_nivel if tecnologia != 'Eficiencia')
                                                          )
                                                        )
+#Adicionando os anos antigos
+for year in Energy_consumption_BEN.columns[10:-1]:
+    CE_mit[year] = Energy_consumption_BEN[year]
+
+CE_mit = CE_mit.sort_index(axis=1)
 
 lista_comb = [item for item in CE_mit.index if item != "Total"]
 lista_comb_processo = ['Coque de carvao mineral','Carvao vegetal','Carvao metalurgico']
@@ -873,7 +878,7 @@ import os
 from openpyxl import load_workbook
 
 # Specify the output directory and file path
-output_directory = 'C:/Users/Otto/OneDrive/Doutorado/Tese/Resultados/'
+output_directory = 'C:/Users/ottoh/OneDrive/Doutorado/Tese/Resultados/Imagine/'
 ##output_filename = 'Energia_50%.xlsx'
 #excel_file = pd.ExcelFile(file_path)
 #
@@ -882,69 +887,51 @@ output_directory = 'C:/Users/Otto/OneDrive/Doutorado/Tese/Resultados/'
 tab_name = 'Steel'
 
 # Define the Excel file name
-excel_file = 'Energia_50%.xlsx'
+excel_file = 'Energia_Imagine_CPS_V0.xlsx'
 
-# Check if the output directory exists, create it if not
+# Function to save DataFrame to a specific sheet in an Excel file
+def save_to_excel(df, file_path, sheet_name):
+    # Check if file exists
+    if os.path.exists(file_path):
+        # Open the file in write mode, and overwrite the sheet if it exists
+        with pd.ExcelWriter(file_path, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
+            df.to_excel(writer, sheet_name=sheet_name, index=True)
+    else:
+        # Create a new Excel file with the given sheet name
+        with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
+            df.to_excel(writer, sheet_name=sheet_name, index=True)
 
-if not os.path.exists(output_directory):
-    os.makedirs(output_directory)
-
-# Check if the Excel file exists
-output_file_path = output_directory + excel_file
-if not os.path.isfile(output_file_path):
-    # If the Excel file doesn't exist, create a new one
-    with pd.ExcelWriter(output_file_path, mode='xlsxwriter') as writer:
-        CE_mit.to_excel(writer, sheet_name=tab_name, index=True)
-else:
-    # If the Excel file already exists, open it and overwrite the tabs if they exist
-    book = load_workbook(output_file_path)
-    writer = pd.ExcelWriter(output_file_path, engine='openpyxl')
-    writer.book = book
-
-    if tab_name in writer.book.sheetnames:
-        # If the cement tab already exists, remove it
-        cmt = writer.book.get_sheet_by_name(tab_name)
-        writer.book.remove(cmt)
-
-    # Add the DataFrames to the Excel file
-    CE_mit.to_excel(writer, sheet_name=tab_name, index=True)
-
-    # Save the changes
-    writer.save()
-    writer.close()
+# Path to the Excel file
+# file_path = 'C:/Users/ottoh/OneDrive/Doutorado/Tese/Resultados/Imagine/Energia_Imagine_CPS_V0.xlsx'
+file_path = output_directory + excel_file
+save_to_excel(CE_mit, file_path, tab_name)
     
 """Custos"""
 # Define the Excel file name
-excel_file = 'Custos_50%.xlsx'
+excel_file = 'Custos_Imagine_CPS_V0.xlsx'
 
-# Check if the output directory exists, create it if not
+# Specify the output directory and file path
+output_directory = 'C:/Users/ottoh/OneDrive/Doutorado/Tese/Resultados/Imagine/'
 
-if not os.path.exists(output_directory):
-    os.makedirs(output_directory)
+tab_name = 'Steel'
 
-# Check if the Excel file exists
-output_file_path = output_directory + excel_file
-if not os.path.isfile(output_file_path):
-    # If the Excel file doesn't exist, create a new one
-    with pd.ExcelWriter(output_file_path, mode='xlsxwriter') as writer:
-        Results.to_excel(writer, sheet_name=tab_name, index=True)
-else:
-    # If the Excel file already exists, open it and overwrite the tabs if they exist
-    book = load_workbook(output_file_path)
-    writer = pd.ExcelWriter(output_file_path, engine='openpyxl')
-    writer.book = book
+# Function to save DataFrame to a specific sheet in an Excel file
+def save_to_excel(df, file_path, sheet_name):
+    # Check if file exists
+    if os.path.exists(file_path):
+        # Open the file in write mode, and overwrite the sheet if it exists
+        with pd.ExcelWriter(file_path, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
+            df.to_excel(writer, sheet_name=sheet_name, index=True)
+    else:
+        # Create a new Excel file with the given sheet name
+        with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
+            df.to_excel(writer, sheet_name=sheet_name, index=True)
 
-    if tab_name in writer.book.sheetnames:
-        # If the cement tab already exists, remove it
-        cmt = writer.book.get_sheet_by_name(tab_name)
-        writer.book.remove(cmt)
+# Path to the Excel file
+# file_path = 'C:/Users/ottoh/OneDrive/Doutorado/Tese/Resultados/Imagine/Energia_Imagine_CPS_V0.xlsx'
+file_path = output_directory + excel_file
+save_to_excel(Results, file_path, tab_name)
 
-    # Add the DataFrames to the Excel file
-    Results.to_excel(writer, sheet_name=tab_name, index=True)
-
-    # Save the changes
-    writer.save()
-    writer.close()
 #%% 
     
 """Creating a Cost Curve for the Steel industry"""
