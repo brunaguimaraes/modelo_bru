@@ -347,9 +347,12 @@ for year in np.linspace(2024,2050,2050-2024+1).astype(int):
     pig_iron_production.loc[year] = np.full([len(pig_iron_production.columns)],np.nan)
 
 Production_increase = {
-        2030:1.265
-        ,2040:1.52
-        ,2050:1.757
+        2025:1.06,
+        2030:1.16,
+        2035:1.29,
+        2040:1.44,
+        2045:1.55,
+        2050:1.67,
         }
 
 colunas = ['BOF','EAF',"Total","BOF MC","BOF CC"]
@@ -495,7 +498,7 @@ R4 = Route Independet producers
     
     levelized = interest_rate*((1+interest_rate)**20)/((1+interest_rate)**20-1)
     
-    capex_total = (capex_R1 + capex_R2+capex_R3 + capex_R4 + capex_R5+ capex_R6+capex_R7+capex_CCS)*interest_rate*((1+interest_rate)**20)/((1+interest_rate)**20-1)
+    capex_total = (capex_R1 + capex_R2+capex_R3 + capex_R4 + capex_R5+ capex_R6+capex_R7+capex_CCS)*levelized
 #    capex_total = (capex_R1+ capex_R2+capex_R3 + capex_R4 + capex_R5+ capex_R6+capex_R7+capex_CCS)*interest_rate*((1+interest_rate)**20)/((1+interest_rate)**20-1)
     opex_total =     opex_R1+opex_R2+opex_R3+opex_R4+opex_R5+opex_R6+opex_R7+opex_CCS
 
@@ -519,6 +522,7 @@ R4 = Route Independet producers
         
            
     model.con.add(model.X5<=innovation_measures.loc[0]['Penetration']) #NG
+    # model.con.add(model.X5<=0) #NG in REF scenario
     model.con.add(model.X6+steel_production['Share_BOF_CC'][year]<=0.16) #charcoal limite
     model.con.add(model.X7<=penetration_inovative[str(year)]['DR-H2']) #H2
     model.con.add(model.X8<=penetration_inovative[str(year)]['SR']) #SR
@@ -748,7 +752,7 @@ R4 = Route Independet producers
 # Criar os anos como índices
 anos = list(range(2023, 2051))
 
-Emission_reduction = pd.DataFrame(data = np.linspace(1,.5,28),index= anos)
+Emission_reduction = pd.DataFrame(data = np.linspace(1,0.96,28),index= anos)
 Emission_reduction = Emission_reduction[0].to_dict()
 
 Emission_base = pd.DataFrame(data = np.linspace(1,1,28),index= anos)
@@ -783,11 +787,11 @@ for i in Emission_reduction:
 
 #Gerando resultados
 for i in Emission_reduction:
-    x,capex_total,CE_1,mitigacao,opex= optimization_module(i,emission_calc(2024)*Emission_reduction[i]) 
+    x,capex_total,CE_1,mitigacao,opex= optimization_module(i,emission_calc(i)*Emission_reduction[i]) 
 #    
     Results[i]['Cost Decarbonization'] = float(x.obj())    
 #    Results[i]['Cost reference']=float(y.obj())
-    Results[i]['Emissions'] = emission_calc(2024)*Emission_reduction[i]
+    Results[i]['Emissions'] = emission_calc(i)*Emission_reduction[i]
 #    Results[i]['Emissions'] = emission_calc(i)
     Results[i]['Emission base'] = emission_calc(i)
     Results[i]['Capex_decarb'] = capex_total()
@@ -822,11 +826,6 @@ for i in Emission_reduction:
                                                          -sum(mitigacao_df.loc[i, ( tecnologia, 'Gasto comb')] for tecnologia in primeiro_nivel if tecnologia != 'Eficiencia')
                                                          )
                                                        )
-#Adicionando os anos antigos
-for year in Energy_consumption_BEN.columns[10:-1]:
-    CE_mit[year] = Energy_consumption_BEN[year]
-
-CE_mit = CE_mit.sort_index(axis=1)
 
 lista_comb = [item for item in CE_mit.index if item != "Total"]
 lista_comb_processo = ['Coque de carvao mineral','Carvao vegetal','Carvao metalurgico']
@@ -871,6 +870,11 @@ for year in CE_mit.columns:
     emissoes_gas_energia[year]['CH4'] = ch4
     emissoes_gas_energia[year]['N2O'] = n2o
 
+#Adicionando os anos antigos
+for year in Energy_consumption_BEN.columns[10:-1]:
+    CE_mit[year] = Energy_consumption_BEN[year]
+
+CE_mit = CE_mit.sort_index(axis=1)
 #%%
 """Exporting values to excel"""
 
@@ -912,8 +916,6 @@ excel_file = 'Custos_Imagine_CPS_V0.xlsx'
 
 # Specify the output directory and file path
 output_directory = 'C:/Users/ottoh/OneDrive/Doutorado/Tese/Resultados/Imagine/'
-
-tab_name = 'Steel'
 
 # Function to save DataFrame to a specific sheet in an Excel file
 def save_to_excel(df, file_path, sheet_name):
