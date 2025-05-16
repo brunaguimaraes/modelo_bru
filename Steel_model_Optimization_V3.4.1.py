@@ -87,7 +87,7 @@ EI_BEU = EI_BEU.replace({'Combustivel':'Outras fontes primarias'},'Outras fontes
 
 """Importing Mitigation measures:"""
 
-mitigation_measures = pd.read_csv("https://raw.githubusercontent.com/ottohebeda/Iron-and-steel-model/main/Iron_and_steel_mitigation_measures.csv")
+mitigation_measures = pd.read_csv("https://raw.githubusercontent.com/ottohebeda/Iron-and-steel-model/main/Iron_and_steel_mitigation_measures_V2.csv")
 mitigation_measures['Total Reduction GJ/t'] = mitigation_measures['Energy reduction (Gj/t)']*mitigation_measures.Penetration
 
 #lifetime of mitigation measures:
@@ -119,7 +119,7 @@ penetration_inovative = pd.read_csv('https://raw.githubusercontent.com/ottohebed
 penetration_inovative = penetration_inovative.set_index('Technology')
 
 """Importing Fuel prices"""
-fuel_prices = pd.read_csv("https://raw.githubusercontent.com/ottohebeda/Iron-and-steel-model/main/Fuel_price_2.csv")
+fuel_prices = pd.read_csv("https://raw.githubusercontent.com/ottohebeda/Iron-and-steel-model/main/Fuel_price_3.csv")
 #fuel_prices['BRL/TJ'] = fuel_prices['BRL/ktep']/ktoe_to_tj 
 fuel_prices = fuel_prices.set_index('﻿Combustivel')
 #fuel_prices.loc['Gas natural'] =fuel_prices.loc['Gas natural']/20
@@ -347,25 +347,31 @@ for year in np.linspace(2024,2050,2050-2024+1).astype(int):
     pig_iron_production.loc[year] = np.full([len(pig_iron_production.columns)],np.nan)
 
 Production_increase = {
-        2025:1.06,
-        2030:1.16,
-        2035:1.29,
-        2040:1.44,
-        2045:1.55,
-        2050:1.67,
+        2025:1.037,
+        2030:1.146,
+        2035:1.306,
+        2040:1.486,
+        2045:1.699,
+        2050:1.961,
         }
 
 colunas = ['BOF','EAF',"Total","BOF MC","BOF CC"]
 #Production route share will be equal to the values for the base year
 for coluna in colunas:
+    steel_production[coluna][2025] = float(steel_production.loc[base_year][coluna]*Production_increase[2025])
     steel_production[coluna][2030] = float(steel_production.loc[base_year][coluna]*Production_increase[2030])
+    steel_production[coluna][2035] = float(steel_production.loc[base_year][coluna]*Production_increase[2035])
     steel_production[coluna][2040] = float(steel_production.loc[base_year][coluna]*Production_increase[2040])
+    steel_production[coluna][2045] = float(steel_production.loc[base_year][coluna]*Production_increase[2045])
     steel_production[coluna][2050] = float(steel_production.loc[base_year][coluna]*Production_increase[2050])
 
 colunas = ['Integrada CM','Integrada CV','Independente CV']    
 for coluna in colunas:    
+    pig_iron_production[coluna][2025] = float(pig_iron_production.loc[base_year][coluna]*Production_increase[2025])
     pig_iron_production[coluna][2030] = float(pig_iron_production.loc[base_year][coluna]*Production_increase[2030])
+    pig_iron_production[coluna][2035] = float(pig_iron_production.loc[base_year][coluna]*Production_increase[2035])
     pig_iron_production[coluna][2040] = float(pig_iron_production.loc[base_year][coluna]*Production_increase[2040])
+    pig_iron_production[coluna][2045] = float(pig_iron_production.loc[base_year][coluna]*Production_increase[2045])
     pig_iron_production[coluna][2050] = float(pig_iron_production.loc[base_year][coluna]*Production_increase[2050])
     
 steel_production['Share_BOF_MC'][2050] = steel_production['Share_BOF_MC'][base_year]
@@ -522,10 +528,11 @@ R4 = Route Independet producers
         
            
     model.con.add(model.X5<=innovation_measures.loc[0]['Penetration']) #NG
-    # model.con.add(model.X5<=0) #NG in REF scenario
+    # model.con.add(model.X5<=0.25) #NG in REF scenario
     model.con.add(model.X6+steel_production['Share_BOF_CC'][year]<=0.16) #charcoal limite
     model.con.add(model.X7<=penetration_inovative[str(year)]['DR-H2']) #H2
     model.con.add(model.X8<=penetration_inovative[str(year)]['SR']) #SR
+    model.con.add(model.X8<=0.0) #SR
 #    model.con.add(model.X9+steel_production['Share_EAF'][year]<=0.3) #EAF
 #    model.con.add(model.X6+steel_production['Share_BOF_CC'][year]+model.X8<=0.50)
     model.con.add(model.X5+model.X6+model.X7+model.X8 +model.X9+model.CCS <= float(steel_production.loc[year]['Share_BOF_MC']))
@@ -752,7 +759,7 @@ R4 = Route Independet producers
 # Criar os anos como índices
 anos = list(range(2023, 2051))
 
-Emission_reduction = pd.DataFrame(data = np.linspace(1,0.96,28),index= anos)
+Emission_reduction = pd.DataFrame(data = np.linspace(1,0.70,28),index= anos)
 Emission_reduction = Emission_reduction[0].to_dict()
 
 Emission_base = pd.DataFrame(data = np.linspace(1,1,28),index= anos)
@@ -872,7 +879,7 @@ for year in CE_mit.columns:
 
 #Adicionando os anos antigos
 for year in Energy_consumption_BEN.columns[10:-1]:
-    CE_mit[year] = Energy_consumption_BEN[year]
+    CE_mit[year] = Energy_consumption_BEN[year]*ktoe_to_tj
 
 CE_mit = CE_mit.sort_index(axis=1)
 #%%
@@ -891,7 +898,7 @@ output_directory = 'C:/Users/ottoh/OneDrive/Doutorado/Tese/Resultados/Imagine/'
 tab_name = 'Steel'
 
 # Define the Excel file name
-excel_file = 'Energia_Imagine_CPS_V0.xlsx'
+excel_file = 'Energia_Imagine_MIT1_V1.xlsx'
 
 # Function to save DataFrame to a specific sheet in an Excel file
 def save_to_excel(df, file_path, sheet_name):
@@ -908,11 +915,11 @@ def save_to_excel(df, file_path, sheet_name):
 # Path to the Excel file
 # file_path = 'C:/Users/ottoh/OneDrive/Doutorado/Tese/Resultados/Imagine/Energia_Imagine_CPS_V0.xlsx'
 file_path = output_directory + excel_file
-save_to_excel(CE_mit, file_path, tab_name)
+save_to_excel(CE_mit/ktoe_to_tj, file_path, tab_name)
     
 """Custos"""
 # Define the Excel file name
-excel_file = 'Custos_Imagine_CPS_V0.xlsx'
+excel_file = 'Custos_Imagine_MIT1_V1.xlsx'
 
 # Specify the output directory and file path
 output_directory = 'C:/Users/ottoh/OneDrive/Doutorado/Tese/Resultados/Imagine/'
@@ -934,6 +941,57 @@ def save_to_excel(df, file_path, sheet_name):
 file_path = output_directory + excel_file
 save_to_excel(Results, file_path, tab_name)
 
+"""Custos de mitigacao"""
+# Define the Excel file name
+excel_file = 'MAC_Imagine_MIT1_V1.xlsx'
+
+# Specify the output directory and file path
+output_directory = 'C:/Users/ottoh/OneDrive/Doutorado/Tese/Resultados/Imagine/'
+
+# Function to save DataFrame to a specific sheet in an Excel file
+def save_to_excel(df, file_path, sheet_name):
+    # Check if file exists
+    if os.path.exists(file_path):
+        # Open the file in write mode, and overwrite the sheet if it exists
+        with pd.ExcelWriter(file_path, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
+            df.to_excel(writer, sheet_name=sheet_name, index=True)
+    else:
+        # Create a new Excel file with the given sheet name
+        with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
+            df.to_excel(writer, sheet_name=sheet_name, index=True)
+
+# Path to the Excel file
+# file_path = 'C:/Users/ottoh/OneDrive/Doutorado/Tese/Resultados/Imagine/Energia_Imagine_CPS_V0.xlsx'
+file_path = output_directory + excel_file
+save_to_excel(mitigacao_df, file_path, tab_name)
+
+"""Emissões"""
+# Define the Excel file name
+excel_file = 'EmissoesEnergia_Imagine_MIT1_V1.xlsx'
+
+# Specify the output directory and file path
+output_directory = 'C:/Users/ottoh/OneDrive/Doutorado/Tese/Resultados/Imagine/'
+
+# Function to save DataFrame to a specific sheet in an Excel file
+def save_to_excel(df, file_path, sheet_name):
+    # Check if file exists
+    if os.path.exists(file_path):
+        # Open the file in write mode, and overwrite the sheet if it exists
+        with pd.ExcelWriter(file_path, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
+            df.to_excel(writer, sheet_name=sheet_name, index=True)
+    else:
+        # Create a new Excel file with the given sheet name
+        with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
+            df.to_excel(writer, sheet_name=sheet_name, index=True)
+
+# Path to the Excel file
+# file_path = 'C:/Users/ottoh/OneDrive/Doutorado/Tese/Resultados/Imagine/Energia_Imagine_CPS_V0.xlsx'
+file_path = output_directory + excel_file
+save_to_excel(emissoes_gas_energia, file_path, tab_name)
+
+excel_file = 'EmissoesProcesso_Imagine_MIT1_V1.xlsx'
+file_path = output_directory + excel_file
+save_to_excel(emissoes_gas_processo, file_path, tab_name)
 #%% 
     
 """Creating a Cost Curve for the Steel industry"""
