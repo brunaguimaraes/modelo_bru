@@ -10,6 +10,25 @@ TO DO:
   - ajustar um excel com o ano base do chris e ver como está a situação atual e adicionar uma extra com esse valor restante
   - salvar esse excel na miha pasta e aprender a conectar a localiação aqui
   
+  
+  DÚVIDAS PRO OTTO:::
+      - Arquivo de medidas de mitigação, tem um com 31 medidas e outro com mais de 40, qual usar? ""
+                      'C:/Users/Bruna/OneDrive/DOUTORADO/0.TESE/modelagem/modelo_bru/Iron_and_steel_mitigation_measures_V2.csv'
+                      Iron_and_steel_mitigation_measures
+      - Arquivo de inovation measures, qual usar?
+                      Innovation_measures.csv
+                      Innovation_measures_2.csv?
+                      
+      - no ultimo arquivo da tese do otto, CCS não está na lista de inovation measures, mas está na lista de penetration. HELP
+
+                
+
+      - Ainda me é muito confuso pensar em como dividir isso tudo por plantas. Eu pensei em tratar de plantas 
+      só no início. 
+      E criar uma variável de disponibilidade de capacidade, quando alguma das plantas atingir a vida útil, 
+      aumenta a disponibilidade.
+      Ainnnn quando eu acho que entendi, eu não entendo mais
+      
 """
  
 import pandas as pd
@@ -40,6 +59,125 @@ for _, row in plants.iterrows():
 # 3) Iniciar acumulador de nova capacidade (decisão de investimento)
 cum_new_cap = {p: 0.0 for p in routes}
 
+
+#%%
+### inserindo mais dados históricos de produção
+### inserindo mais dados históricos de produção conforme modelagem do Otto
+### inserindo mais dados históricos de produção
+
+"""Importing Crude Steel production by route in kt"""
+
+steel_production = pd.read_csv('C:/Users/Bruna/OneDrive/DOUTORADO/0.TESE/modelagem/modelo_bru/steel_production.csv') #in kt
+steel_production = steel_production.set_index('Year')   
+steel_production['Total']= steel_production.sum(axis=1)
+
+"""Importing Pig Iron production by Route in kt"""
+pig_iron_production = pd.read_csv('C:/Users/Bruna/OneDrive/DOUTORADO/0.TESE/modelagem/modelo_bru/Pig_iron_production.csv')
+pig_iron_production = pig_iron_production.set_index('Ano')
+pig_iron_production['Share BOF CC'] = pig_iron_production['Integrada CV']/(pig_iron_production['Integrada CV']+pig_iron_production['Integrada CM'])
+pig_iron_production['Share BOF MC']=1-pig_iron_production['Share BOF CC']
+
+"""Charcoal and coal in BF-BOF production"""
+#BOF Coal production in Mt
+steel_production['BOF MC'] = steel_production.BOF*pig_iron_production['Share BOF MC']
+
+#BOF Charcoal production in Mt
+steel_production['BOF CC'] = steel_production.BOF*pig_iron_production['Share BOF CC']
+
+steel_production['Total']= steel_production['BOF']+steel_production['EAF'] #Removing EOF from the total
+steel_production = steel_production.drop('EOF',axis= 'columns')
+
+steel_production['Share_BOF_MC'] = steel_production['BOF MC']/steel_production['Total']
+steel_production['Share_BOF_CC'] = steel_production['BOF CC']/steel_production['Total']
+steel_production['Share_EAF'] = steel_production['EAF']/steel_production['Total']
+
+"""Scrap supply"""
+scrap_supply = pd.read_csv('C:/Users/Bruna/OneDrive/DOUTORADO/0.TESE/modelagem/modelo_bru/Scrap_supply.csv')
+scrap_supply = scrap_supply.set_index('Recovery_rate')
+
+"""Importing Emission Factor"""
+emission_factor = pd.read_csv('C:/Users/Bruna/OneDrive/DOUTORADO/0.TESE/modelagem/modelo_bru/emission_factor.csv') #t/TJ or kg/GJ
+emission_factor = emission_factor.set_index('Combustivel')
+emission_factor['CO2e'] = emission_factor['CO2'] + emission_factor['CH4']*28 + emission_factor['N2O']*265
+
+"""Importing Energy Consumption compatible with the Useful Energy Balance (BEU):
+    In the META report they already separeted the Final Energy Consumption in the same nomenclature as the BEU
+    """
+EI_BEU = pd.read_csv('C:/Users/Bruna/OneDrive/DOUTORADO/0.TESE/modelagem/modelo_bru/EI_Route_Step_year.csv')
+EI_BEU =EI_BEU.fillna(0)
+
+#dropping null values: Lenha, Produtos da cana, Gasolina, Querosene, Alcatrao, Alcool etilico
+
+EI_BEU = EI_BEU[EI_BEU.Combustivel != 'Lenha']
+EI_BEU = EI_BEU[EI_BEU.Combustivel != 'Produtos da cana']
+EI_BEU = EI_BEU[EI_BEU.Combustivel != 'Gasolina']
+EI_BEU = EI_BEU[EI_BEU.Combustivel != 'Querosene']
+EI_BEU = EI_BEU[EI_BEU.Combustivel != 'Alcatrao']
+EI_BEU = EI_BEU[EI_BEU.Combustivel != 'Alcool etilico']
+EI_BEU = EI_BEU[EI_BEU.Combustivel != 'Outras fontes secundarias'] 
+
+EI_BEU = EI_BEU.replace({'Combustivel':'Gases cidade'},'Gas cidade') #changing Gases cidade for Gas Cidade
+EI_BEU = EI_BEU.replace({'Combustivel':'Outras fontes primarias'},'Outras fontes secundarias') #changing Outras primarias para outras secundarias
+
+
+#%%
+### inserindo informações sobre as medidas de mitigação
+### inserindo informações sobre as medidas de mitigação conforme modelagem do Otto
+### inserindo informações sobre as medidas de mitigação
+
+
+"""Importing Mitigation measures:"""
+
+mitigation_measures = pd.read_csv('C:/Users/Bruna/OneDrive/DOUTORADO/0.TESE/modelagem/modelo_bru/Iron_and_steel_mitigation_measures_V2.csv')
+mitigation_measures['Total Reduction GJ/t'] = mitigation_measures['Energy reduction (Gj/t)']*mitigation_measures.Penetration
+
+#lifetime of mitigation measures:
+life_time = 20 #years
+mitigation_measures_dict = {}
+for route in pd.unique(mitigation_measures.Route):
+    mitigation_dict = {}
+    mitigation = {}
+    for etapa in pd.unique(mitigation_measures.loc[mitigation_measures['Route']==route,'Step']):
+#        mitigation=mitigation_measures.loc[mitigation_measures['Route']==route].loc[mitigation_measures['Step']==etapa].set_index('Mitigation measure').drop(['Route','Step'],axis = 1).transpose().to_dict()
+#        mitigation_dict[etapa] = mitigation
+        mitigation=mitigation_measures.loc[mitigation_measures['Route']==route].set_index('Mitigation measure').drop(['Route'],axis = 1).transpose().to_dict()
+    mitigation_measures_dict[route] = mitigation
+    
+# teste = mitigation_measures.loc[mitigation_measures['Route']==route].set_index('Mitigation measure').drop(['Route'],axis = 1).transpose().to_dict()
+
+#Percentual of intensity reduction within each route and step
+mitigation_measures['Percentual of reduction'] = 0
+for indice in mitigation_measures.index:
+    intensidade_Route_etapa= float(pd.DataFrame((mitigation_measures.loc[mitigation_measures['Route'] == mitigation_measures.loc[indice]['Route']].groupby('Step').sum()['Total Reduction GJ/t'])).loc[mitigation_measures.loc[indice]['Step']])
+    if intensidade_Route_etapa == 0:
+        pass
+    else:
+        mitigation_measures.loc[indice,'Percentual of reduction'] = mitigation_measures.loc[indice]['Total Reduction GJ/t']/intensidade_Route_etapa
+        
+innovation_measures = pd.read_csv('https://raw.githubusercontent.com/ottohebeda/Iron-and-steel-model/main/Innovation_measures.csv')
+
+penetration_inovative = pd.read_csv('https://raw.githubusercontent.com/ottohebeda/Iron-and-steel-model/main/Penetration_innovative.csv')
+penetration_inovative = penetration_inovative.set_index('Technology')
+#Essa etapa do penetration_inovative:
+    #Lê um arquivo de limites máximos permitidos (por ano, por tecnologia de ponta/innovativa).
+    #Reestrutura para que a busca desses limites seja por nome da tecnologia (como índice).
+    #Essa tabela será usada como restrição, dentro do otimizador, para impedir que inovações sejam adotadas antes do tempo/pleno mercado.
+
+"""Importing Fuel prices"""
+fuel_prices = pd.read_csv("https://raw.githubusercontent.com/ottohebeda/Iron-and-steel-model/main/Fuel_price_3.csv")
+#fuel_prices['BRL/TJ'] = fuel_prices['BRL/ktep']/ktoe_to_tj 
+fuel_prices = fuel_prices.set_index('﻿Combustivel')
+#fuel_prices.loc['Gas natural'] =fuel_prices.loc['Gas natural']/20
+
+"""interest rate"""
+interest_rate = 0.08
+
+
+
+
+#%%
+
+
 # 4) Ajustar sua função de otimização para receber e usar essas capacidades
 def optimization_module(year, emission_target, cap_exist, cum_new):
     model = ConcreteModel()
@@ -47,6 +185,10 @@ def optimization_module(year, emission_target, cap_exist, cum_new):
     # --- variáveis originais ---
     # model.X1, X2, ..., X9, CCS etc.
     # ... (mantém toda a lógica de medidas de mitigação) ...
+    
+    
+    
+    
 
     # --- nova variável: capacidade adicional anual por rota ---
     model.newCap = Var(routes, within=NonNegativeReals)
@@ -56,6 +198,10 @@ def optimization_module(year, emission_target, cap_exist, cum_new):
     production_R2 = (...)
     production_R3 = (...)
     production_R4 = (...)
+    
+    
+    
+    
     # produção de inovações (model.X5..X9)
 
     # --- restrições de vida útil / capacidade ---
