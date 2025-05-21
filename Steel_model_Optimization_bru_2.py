@@ -12,6 +12,15 @@ TO DO:
   
   
   DÚVIDAS PRO OTTO:::
+      - PRECISO DEFINIR O MEU ANO BASE!
+              Entendo que os dados das plantas vem do BATAILLE e que são de 2019. Então esse acaba tendo que
+              ser forçadamente o meu ano base, correto? Posso roubar pra 2020? Logo ano de COVID =(
+                  
+            Pensei em tentar arrumar dados mais recentes, mas também não estou com muita disposição pra isso
+            e eu acho que isso não vai ser tãããão determinante assim, a ponto de valer o esforço. o que acha?
+            
+            Decidido isso, tenho que repensar toda a etapa de """2. Historic Data"""
+                  
       - Arquivo de medidas de mitigação, tem um com 31 medidas e outro com mais de 40, qual usar? ""
                       'C:/Users/Bruna/OneDrive/DOUTORADO/0.TESE/modelagem/modelo_bru/Iron_and_steel_mitigation_measures_V2.csv'
                       Iron_and_steel_mitigation_measures
@@ -154,9 +163,9 @@ for indice in mitigation_measures.index:
     else:
         mitigation_measures.loc[indice,'Percentual of reduction'] = mitigation_measures.loc[indice]['Total Reduction GJ/t']/intensidade_Route_etapa
         
-innovation_measures = pd.read_csv('https://raw.githubusercontent.com/ottohebeda/Iron-and-steel-model/main/Innovation_measures.csv')
+innovation_measures = pd.read_csv('C:/Users/Bruna/OneDrive/DOUTORADO/0.TESE/modelagem/modelo_bru/Innovation_measures.csv')
 
-penetration_inovative = pd.read_csv('https://raw.githubusercontent.com/ottohebeda/Iron-and-steel-model/main/Penetration_innovative.csv')
+penetration_inovative = pd.read_csv('C:/Users/Bruna/OneDrive/DOUTORADO/0.TESE/modelagem/modelo_bru/Penetration_innovative.csv')
 penetration_inovative = penetration_inovative.set_index('Technology')
 #Essa etapa do penetration_inovative:
     #Lê um arquivo de limites máximos permitidos (por ano, por tecnologia de ponta/innovativa).
@@ -164,7 +173,7 @@ penetration_inovative = penetration_inovative.set_index('Technology')
     #Essa tabela será usada como restrição, dentro do otimizador, para impedir que inovações sejam adotadas antes do tempo/pleno mercado.
 
 """Importing Fuel prices"""
-fuel_prices = pd.read_csv("https://raw.githubusercontent.com/ottohebeda/Iron-and-steel-model/main/Fuel_price_3.csv")
+fuel_prices = pd.read_csv('C:/Users/Bruna/OneDrive/DOUTORADO/0.TESE/modelagem/modelo_bru/Fuel_price_3.csv')
 #fuel_prices['BRL/TJ'] = fuel_prices['BRL/ktep']/ktoe_to_tj 
 fuel_prices = fuel_prices.set_index('﻿Combustivel')
 #fuel_prices.loc['Gas natural'] =fuel_prices.loc['Gas natural']/20
@@ -172,8 +181,206 @@ fuel_prices = fuel_prices.set_index('﻿Combustivel')
 """interest rate"""
 interest_rate = 0.08
 
+ 
+#%%
+"""2. Historic Data"""
 
+#Years from the historic data
+past_years = np.linspace(2005,2023,2023-2005+1,dtype = int)
 
+#Future years:
+future_years = np.linspace(2024,2050,2050-2024+1,dtype = int)
+
+#Base year (reference year for the projections)
+base_year = 2023
+
+#Energy Consumption in the Steel Production in the National Energy Balance (BEN)
+ 
+# Energy_consumption_BEN = pd.read_csv("https://raw.githubusercontent.com/ottohebeda/Industry_Energy_Emissions_simulator/main/CE_Siderurgia.csv") #importing BEN_Steel
+Energy_consumption_BEN = pd.read_excel("CE_Siderurgia novo.xlsx") #importing BEN_Steel
+Energy_consumption_BEN = Energy_consumption_BEN.fillna(0) #filling NA with 0
+Energy_consumption_BEN = Energy_consumption_BEN.replace({'FONTES':'Carvao mineral'},'Carvao metalurgico') #changing Outras primarias para outras secundarias
+Energy_consumption_BEN = Energy_consumption_BEN.replace({'FONTES':'Gas de coqueria'},'Gas cidade') #changing Outras primarias para outras secundarias
+Energy_consumption_BEN = Energy_consumption_BEN.replace({'FONTES':'Alcatrao'},'Outras fontes secundarias') #changing Outras primarias para outras secundarias
+Energy_consumption_BEN = Energy_consumption_BEN.set_index('FONTES') #Changin index for Sources
+Energy_consumption_BEN.index = Energy_consumption_BEN.index.str.capitalize() #Change all UPPER to Capitalize
+Energy_consumption_BEN.columns = Energy_consumption_BEN.columns.astype(int) #Changing the columns type: from str to int
+
+#Summing Biodeisel with Diesel to adjust the nomenclature:
+Energy_consumption_BEN.loc['Oleo diesel'] = Energy_consumption_BEN.loc['Biodiesel']+Energy_consumption_BEN.loc['Oleo diesel']
+Energy_consumption_BEN = Energy_consumption_BEN.drop(index = ['Biodiesel'])
+Energy_consumption_BEN = Energy_consumption_BEN.rename(index = {'Glp': 'GLP'}) #fixing name
+Energy_consumption_BEN = Energy_consumption_BEN .sort_index() #ordering the rows by fuel name
+#Converting to Gj:
+Energy_consumption_BEN_Gj = Energy_consumption_BEN*ktoe_to_tj 
+#
+
+#%%
+"""Energy intensity of each route"""
+R1_EI_Total = EI_BEU.loc[EI_BEU['Route'] == 'R1'].iloc[:,3:].sum()
+R1_EI_Total.index = R1_EI_Total.index.astype(int)
+R2_EI_Total = EI_BEU.loc[EI_BEU['Route'] == 'R2'].iloc[:,3:].sum()
+R2_EI_Total.index = R2_EI_Total.index.astype(int)
+R3_EI_Total = EI_BEU.loc[EI_BEU['Route'] == 'R3'].iloc[:,3:].sum()
+R3_EI_Total.index = R3_EI_Total.index.astype(int)
+R4_EI_Total = EI_BEU.loc[EI_BEU['Route'] == 'R4'].iloc[:,3:].sum()
+R4_EI_Total.index = R4_EI_Total.index.astype(int)
+
+#%%        
+"""Energy Consumption"""
+
+#R1 Energy Consumption:
+R1_EC_Total = pd.DataFrame(index = R1_EI_Total.index, columns = ['Energy_Consumption'], data = 0)
+for ano in past_years:
+    R1_EC_Total.loc[ano] = R1_EI_Total.loc[ano]*steel_production['BOF MC'][ano]
+
+#R2 Energy_consumption:
+R2_EC_Total = pd.DataFrame(index = R1_EI_Total.index, columns = ['Energy_Consumption'], data = 0)
+for ano in past_years:
+    R2_EC_Total.loc[ano] = R2_EI_Total.loc[ano]*steel_production['BOF CC'][ano]
+
+#R3_Energy_Cosumption:
+R3_EC_Total = pd.DataFrame(index = R1_EI_Total.index, columns = ['Energy_Consumption'], data = 0)
+for ano in past_years:
+    R3_EC_Total.loc[ano] = R3_EI_Total.loc[ano]*steel_production['EAF'][ano]
+
+#R4_Energy_Consumption:
+R4_EC_Total = pd.DataFrame(index = R1_EI_Total.index, columns = ['Energy_Consumption'], data = 0)
+for ano in past_years:
+    R4_EC_Total.loc[ano] = R4_EI_Total.loc[ano]*pig_iron_production['Independente CV'][ano]    
+
+"""Energy Consumption By Fuel"""
+#This function calculates the energy consumption by fuel.
+def energy_consumption(Route):
+    """estimates the energy consumption using the Energy Intensity and the production"""
+    
+    EC_Total = pd.DataFrame(index = EI_BEU.index, columns = EI_BEU.columns, data = 0)
+    EC_Total.Route = EI_BEU.Route
+    EC_Total.Combustivel = EI_BEU.Combustivel
+    EC_Total.Step = EI_BEU.Step
+    
+    #Energy consumption in R1:
+    if Route =='R1':      
+        for ano in EI_BEU.columns[3:]:
+            for indice in EC_Total.loc[EC_Total['Route']=='R1'].index:
+                EC_Total.loc[indice,str(ano)] = EI_BEU.loc[indice,str(ano)]*steel_production['BOF MC'][int(ano)] 
+            
+    #Energy consumption in R2
+    if Route =='R2' :       
+        for ano in EI_BEU.columns[3:]:
+            for indice in EC_Total.loc[EC_Total['Route']=='R2'].index:
+                EC_Total.loc[indice,str(ano)] = EI_BEU.loc[indice,str(ano)]*steel_production['BOF CC'][int(ano)]       
+            
+            #Energy consumption in R3   
+    if Route == 'R3':
+        for ano in EI_BEU.columns[3:]:
+            for indice in EC_Total.loc[EC_Total['Route']=='R3'].index:
+                EC_Total.loc[indice,str(ano)] = EI_BEU.loc[indice,str(ano)]*steel_production['EAF'][int(ano)]  
+            
+            #Energy consumption in R4
+    if Route == 'R4':
+        for ano in EI_BEU.columns[3:]:
+            for indice in EC_Total.loc[EC_Total['Route']=='R4'].index:
+                EC_Total.loc[indice,str(ano)] = EI_BEU.loc[indice,str(ano)]*pig_iron_production['Independente CV'][int(ano)]     
+                
+    if Route == 'todas':
+        for ano in EI_BEU.columns[3:]:
+            for indice in EC_Total.loc[EC_Total['Route']=='R1'].index:
+                EC_Total.loc[indice,str(ano)] = EI_BEU.loc[indice,str(ano)]*steel_production['BOF MC'][int(ano)] 
+        for ano in EI_BEU.columns[3:]:
+            for indice in EC_Total.loc[EC_Total['Route']=='R2'].index:
+                EC_Total.loc[indice,str(ano)] = EI_BEU.loc[indice,str(ano)]*steel_production['BOF CC'][int(ano)]                     
+        for ano in EI_BEU.columns[3:]:
+            for indice in EC_Total.loc[EC_Total['Route']=='R3'].index:
+                EC_Total.loc[indice,str(ano)] = EI_BEU.loc[indice,str(ano)]*steel_production['EAF'][int(ano)]  
+        for ano in EI_BEU.columns[3:]:
+            for indice in EC_Total.loc[EC_Total['Route']=='R4'].index:
+                EC_Total.loc[indice,str(ano)] = EI_BEU.loc[indice,str(ano)]*pig_iron_production['Independente CV'][int(ano)]     
+                
+    return EC_Total
+
+#Energy consumption without calibration
+Total_energy_consumption_R1 = energy_consumption('R1').groupby(['Combustivel'], axis =0, as_index = False).sum()
+Total_energy_consumption_R2 = energy_consumption('R2').groupby(['Combustivel'], axis =0, as_index = False).sum()
+Total_energy_consumption_R3 = energy_consumption('R3').groupby(['Combustivel'], axis =0, as_index = False).sum()
+Total_energy_consumption_R4 = energy_consumption('R4').groupby(['Combustivel'], axis =0, as_index = False).sum()
+Total_energy_consumption = energy_consumption('todas').groupby(['Combustivel'], axis =0, as_index = False).sum()
+
+#%%
+"""Adjustments for the energy consumption'"""
+
+#Matching the Energy Intensity of each fuel, route and step to the energy consumption in the Energy Balance
+for combustivel in Total_energy_consumption['Combustivel']:
+    for ano in past_years:
+        for i in EI_BEU.loc[EI_BEU['Combustivel'] == combustivel].index:
+            EI_BEU[str(ano)][i] = EI_BEU[str(ano)][i]*Energy_consumption_BEN_Gj[ano][combustivel]/Total_energy_consumption.loc[Total_energy_consumption['Combustivel']==combustivel][str(ano)]
+
+"""Creating dictionary"""
+
+EI_dict= {}
+a_dict = {}
+for Route in pd.unique(EI_BEU['Route']):
+    a_dict={}
+    for etapa in pd.unique(EI_BEU.loc[EI_BEU['Route']==Route]['Step']):
+        a =  EI_BEU.loc[EI_BEU['Route']==Route].loc[EI_BEU['Step']==etapa].set_index('Combustivel').drop(['Route','Step'],axis =1)
+        a = a.to_dict()
+        a_dict[etapa] = a
+    EI_dict[Route] = a_dict   
+#%%
+"""Energy intensity of each route ajdusted """
+R1_EI_Total = EI_BEU.loc[EI_BEU['Route'] == 'R1'].iloc[:,3:].sum()
+R1_EI_Total.index = R1_EI_Total.index.astype(int)
+R2_EI_Total = EI_BEU.loc[EI_BEU['Route'] == 'R2'].iloc[:,3:].sum()
+R2_EI_Total.index = R2_EI_Total.index.astype(int)
+R3_EI_Total = EI_BEU.loc[EI_BEU['Route'] == 'R3'].iloc[:,3:].sum()
+R3_EI_Total.index = R3_EI_Total.index.astype(int)
+R4_EI_Total = EI_BEU.loc[EI_BEU['Route'] == 'R4'].iloc[:,3:].sum()
+R4_EI_Total.index = R4_EI_Total.index.astype(int)
+
+"""Energy share by route"""
+
+#Energy consumption after calibration;
+Total_energy_consumption_R1 = energy_consumption('R1').groupby(['Combustivel'], axis =0, as_index = False).sum()
+Total_energy_consumption_R2 = energy_consumption('R2').groupby(['Combustivel'], axis =0, as_index = False).sum()
+Total_energy_consumption_R3 = energy_consumption('R3').groupby(['Combustivel'], axis =0, as_index = False).sum()
+Total_energy_consumption_R4 = energy_consumption('R4').groupby(['Combustivel'], axis =0, as_index = False).sum()
+
+#Creating Energy Share DataFrame by Route
+Energy_share_R1 = Total_energy_consumption_R1.set_index('Combustivel').drop(columns=['Route','Step'])
+Energy_share_R2 = Total_energy_consumption_R2.set_index('Combustivel').drop(columns=['Route','Step'])
+Energy_share_R3 = Total_energy_consumption_R3.set_index('Combustivel').drop(columns=['Route','Step'])
+Energy_share_R4 = Total_energy_consumption_R4.set_index('Combustivel').drop(columns=['Route','Step'])
+
+Energy_share_R1.columns = Energy_share_R1.columns.astype(int)
+Energy_share_R2.columns = Energy_share_R2.columns.astype(int)
+Energy_share_R3.columns = Energy_share_R3.columns.astype(int)
+Energy_share_R4.columns = Energy_share_R4.columns.astype(int)
+
+#EnergyShare = Energy consumption/Total energy consumption
+Energy_share_R1 = Energy_share_R1/Energy_share_R1.sum()
+Energy_share_R2 = Energy_share_R2/Energy_share_R2.sum()
+Energy_share_R3 = Energy_share_R3/Energy_share_R3.sum()
+Energy_share_R4 = Energy_share_R4/Energy_share_R4.sum()
+
+#Energy share will be conserved for future years:
+for i in future_years:
+    Energy_share_R1[i]=Energy_share_R1[base_year]
+    Energy_share_R2[i]=Energy_share_R2[base_year]
+    Energy_share_R3[i]=Energy_share_R3[base_year]
+    Energy_share_R4[i]=Energy_share_R4[base_year]
+
+#Energy Intensity for future years
+for i in future_years:
+    R1_EI_Total[i] = R1_EI_Total[base_year]
+    R2_EI_Total[i] = R2_EI_Total[base_year]
+    R3_EI_Total[i] = R3_EI_Total[base_year]
+    R4_EI_Total[i] = R4_EI_Total[base_year]
+    
+#%%
+
+#%%
+
+#%%
 
 #%%
 
@@ -356,6 +563,8 @@ fuel_prices = fuel_prices.set_index('﻿Combustivel')
 
 """interest rate"""
 interest_rate = 0.08
+
+
  
 #%%
 """2. Historic Data"""
