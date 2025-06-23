@@ -8,7 +8,6 @@ R4 = Route Independet producers
 TO DO: 
   - tudo
   - ajustar um excel com o ano base do chris e ver como está a situação atual e adicionar uma extra com esse valor restante
-  - salvar esse excel na miha pasta e aprender a conectar a localiação aqui
   
   
   DÚVIDAS PRO OTTO:::
@@ -17,7 +16,9 @@ TO DO:
               ser forçadamente o meu ano base, correto? Posso roubar pra 2020? Logo ano de COVID =(
                   
             Pensei em tentar arrumar dados mais recentes, mas também não estou com muita disposição pra isso
-            e eu acho que isso não vai ser tãããão determinante assim, a ponto de valer o esforço. o que acha?
+            e eu acho que isso não vai ser tãããão determinante assim, a ponto de valer o esforço. 
+            
+            Você acha muito ruim usar 2019? Tenho outra solução também (explicar).
             
             Decidido isso, tenho que repensar toda a etapa de """2. Historic Data"""
                   
@@ -112,7 +113,7 @@ emission_factor['CO2e'] = emission_factor['CO2'] + emission_factor['CH4']*28 + e
 """Importing Energy Consumption compatible with the Useful Energy Balance (BEU):
     In the META report they already separeted the Final Energy Consumption in the same nomenclature as the BEU
     """
-EI_BEU = pd.read_csv('C:/Users/Bruna/OneDrive/DOUTORADO/0.TESE/modelagem/modelo_bru/EI_Route_Step_year.csv')
+EI_BEU = pd.read_csv("https://raw.githubusercontent.com/ottohebeda/Iron-and-steel-model/main/EI_Route_Step_year.csv", sep=',')
 EI_BEU =EI_BEU.fillna(0)
 
 #dropping null values: Lenha, Produtos da cana, Gasolina, Querosene, Alcatrao, Alcool etilico

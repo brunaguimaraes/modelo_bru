@@ -1,0 +1,69 @@
+﻿Rota;Combustivel;2019;2020;2021;2022;2023
+R1;Alcatrao;;;;;
+R1;Alcool etilico;;;;;
+R1;Carvao metalurgico;3.142;3.142;3.142;3.142;3.142
+R1;Carvao vegetal;;;;;
+R1;Coque de carvao mineral;9.022;9.022;9.022;9.022;9.022
+R1;Eletricidade;2.138;2.138;2.138;2.138;2.138
+R1;Gas natural;0.662;0.662;0.662;0.662;0.662
+R1;Gases cidade;0.851;0.851;0.851;0.851;0.851
+R1;Gasolina;;;;;
+R1;GLP;;;;;
+R1;Lenha;;;;;
+R1;Oleo combustivel;0.001;0.001;0.001;0.001;0.001
+R1;Oleo diesel;;;;;
+R1;Outras fontes primarias;2.797;2.797;2.797;2.797;2.797
+R1;Outras fontes secundarias;;;;;
+R1;Produtos da cana;;;;;
+R1;Querosene;;;;;
+R2;Alcatrao;;;;;
+R2;Alcool etilico;;;;;
+R2;Carvao metalurgico;;;;;
+R2;Carvao vegetal;6.533;6.533;6.533;6.533;6.533
+R2;Coque de carvao mineral;;;;;
+R2;Eletricidade;4.938;4.938;4.938;4.938;4.938
+R2;Gas natural;1.735;1.735;1.735;1.735;1.735
+R2;Gases cidade;;;;;
+R2;Gasolina;;;;;
+R2;GLP;0.052;0.052;0.052;0.052;0.052
+R2;Lenha;;;;;
+R2;Oleo combustivel;0.058;0.058;0.058;0.058;0.058
+R2;Oleo diesel;;;;;
+R2;Outras fontes primarias;4.759;4.759;4.759;4.759;4.759
+R2;Outras fontes secundarias;;;;;
+R2;Produtos da cana;;;;;
+R2;Querosene;;;;;
+R3;Alcatrao;;;;;
+R3;Alcool etilico;;;;;
+R3;Carvao metalurgico;0.029;0.029;0.029;0.029;0.029
+R3;Carvao vegetal;;;;;
+R3;Coque de carvao mineral;0.139;0.139;0.139;0.139;0.139
+R3;Eletricidade;7.708;7.708;7.708;7.708;7.708
+R3;Gas natural;1.871;1.871;1.871;1.871;1.871
+R3;Gases cidade;;;;;
+R3;Gasolina;;;;;
+R3;GLP;;;;;
+R3;Lenha;;;;;
+R3;Oleo combustivel;;;;;
+R3;Oleo diesel;0.005;0.005;0.005;0.005;0.005
+R3;Outras fontes primarias;;;;;
+R3;Outras fontes secundarias;0.003;0.003;0.003;0.003;0.003
+R3;Produtos da cana;;;;;
+R3;Querosene;;;;;
+R4;Alcatrao;0;0;0;0;0
+R4;Alcool etilico;0;0;0;0;0
+R4;Carvao metalurgico;0;0;0;0;0
+R4;Carvao vegetal;17.6096808;17.6096808;17.6096808;17.6096808;17.6096808
+R4;Coque de carvao mineral;0;0;0;0;0
+R4;Eletricidade;0.3851856;0.3851856;0.3851856;0.3851856;0.3851856
+R4;Gas natural;0;0;0;0;0
+R4;Gases cidade;0;0;0;0;0
+R4;Gasolina;0;0;0;0;0
+R4;GLP;0;0;0;0;0
+R4;Lenha;0;0;0;0;0
+R4;Oleo combustivel;0;0;0;0;0
+R4;Oleo diesel;0.0035;0.0035;0.0035;0.0035;0.0035
+R4;Outras fontes primarias;0;0;0;0;0
+R4;Outras fontes secundarias;0;0;0;0;0
+R4;Produtos da cana;0;0;0;0;0
+R4;Querosene;0;0;0;0;0
