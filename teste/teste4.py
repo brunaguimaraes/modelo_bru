@@ -334,4 +334,1046 @@ for i in future_years:
     R3_EI_Total[i] = R3_EI_Total[current_year]
     R4_EI_Total[i] = R4_EI_Total[current_year]
     
+#%%#%%
+"""Steel production Projection"""
+
+for year in np.linspace(2024,2050,2050-2024+1).astype(int):
+    steel_production.loc[year] =np.full([len(steel_production.columns)],np.nan)
+    pig_iron_production.loc[year] = np.full([len(pig_iron_production.columns)],np.nan)
+
+Production_increase = {
+        2025:1.037,
+        2030:1.146,
+        2035:1.306,
+        2040:1.486,
+        2045:1.699,
+        2050:1.961,
+        }
+
+colunas = ['BOF','EAF',"Total","BOF MC","BOF CC"]
+#Production route share will be equal to the values for the base year
+for coluna in colunas:
+    for ano in [2025, 2030, 2035, 2040, 2045, 2050]:
+        steel_production.loc[ano, coluna] = float(steel_production.loc[current_year, coluna] * Production_increase[ano])
+
+colunas = ['Integrada CM','Integrada CV','Independente CV']    
+for coluna in colunas:
+    for ano in [2025, 2030, 2035, 2040, 2045, 2050]:
+        pig_iron_production.loc[ano, coluna] = float(pig_iron_production.loc[current_year, coluna] * Production_increase[ano])
+    
+steel_production.loc[2050, 'Share_BOF_MC'] = steel_production.loc[current_year, 'Share_BOF_MC']
+steel_production.loc[2050, 'Share_BOF_CC'] = steel_production.loc[current_year, 'Share_BOF_CC']
+steel_production.loc[2050, 'Share_EAF'] = steel_production.loc[current_year, 'Share_EAF']
+pig_iron_production.loc[2050, 'Share BOF CC'] = pig_iron_production.loc[current_year, 'Share BOF CC']
+pig_iron_production.loc[2050, 'Share BOF MC'] = pig_iron_production.loc[current_year, 'Share BOF MC']
+
+steel_production = steel_production.interpolate()
+pig_iron_production= pig_iron_production.interpolate()
+
+
 #%%
+
+
+
+#até aqui parece que está tudo certo
+
+
+
+#%%
+### inserindo informações sobre as medidas de mitigação
+### inserindo informações sobre as medidas de mitigação conforme modelagem do Otto
+### inserindo informações sobre as medidas de mitigação
+
+
+"""Importing Mitigation measures:"""
+
+mitigation_measures = pd.read_csv('C:/Users/Bruna/OneDrive/DOUTORADO/0.TESE/modelagem/modelo_bru/Iron_and_steel_mitigation_measures_V2.csv')
+mitigation_measures['Total Reduction GJ/t'] = mitigation_measures['Energy reduction (Gj/t)']*mitigation_measures.Penetration
+
+#lifetime of mitigation measures:
+life_time = 20 #years
+mitigation_measures_dict = {}
+for route in pd.unique(mitigation_measures.Route):
+    mitigation = (
+        mitigation_measures
+        .loc[mitigation_measures['Route'] == route]
+        .set_index('Mitigation measure')
+        .drop(['Route'], axis=1)
+        .transpose()
+        .to_dict()
+    )
+    mitigation_measures_dict[route] = mitigation
+    
+    
+    #teste = mitigation_measures.loc[mitigation_measures['Route']==route].set_index('Mitigation measure').drop(['Route'],axis = 1).transpose().to_dict()
+
+
+
+#####
+
+#####preciso rever isso
+
+
+
+#Percentual of intensity reduction within each route and step
+"""mitigation_measures['Percentual of reduction'] = 0
+for indice in mitigation_measures.index:
+    intensidade_Route_etapa= float(pd.DataFrame((mitigation_measures.loc[mitigation_measures['Route'] == mitigation_measures.loc[indice]['Route']].groupby('Step').sum()['Total Reduction GJ/t'])).loc[mitigation_measures.loc[indice]['Step']])
+    if intensidade_Route_etapa == 0:
+        pass
+    else:
+        mitigation_measures.loc[indice,'Percentual of reduction'] = mitigation_measures.loc[indice]['Total Reduction GJ/t']/intensidade_Route_etapa
+        
+    """    
+       # Calcula o somatório total de redução por Route
+total_reduction_by_route = (
+    mitigation_measures.groupby('Route')['Total Reduction GJ/t'].transform('sum')
+)
+
+# Adiciona coluna com percentual de redução de cada linha dentro do respectivo Route
+mitigation_measures['Percentual of reduction'] = (
+    mitigation_measures['Total Reduction GJ/t'] / total_reduction_by_route
+) 
+        
+     #####preciso rever isso
+     
+     
+     
+     
+     
+     
+     
+        
+innovation_measures = pd.read_csv('C:/Users/Bruna/OneDrive/DOUTORADO/0.TESE/modelagem/modelo_bru/Innovation_measures.csv')
+
+penetration_inovative = pd.read_csv('C:/Users/Bruna/OneDrive/DOUTORADO/0.TESE/modelagem/modelo_bru/Penetration_innovative.csv')
+penetration_inovative = penetration_inovative.set_index('Technology')
+#Essa etapa do penetration_inovative:
+    #Lê um arquivo de limites máximos permitidos (por ano, por tecnologia de ponta/innovativa).
+    #Reestrutura para que a busca desses limites seja por nome da tecnologia (como índice).
+    #Essa tabela será usada como restrição, dentro do otimizador, para impedir que inovações sejam adotadas antes do tempo/pleno mercado.
+
+"""Importing Fuel prices"""
+fuel_prices = pd.read_csv('C:/Users/Bruna/OneDrive/DOUTORADO/0.TESE/modelagem/modelo_bru/Fuel_price_3.csv')
+#fuel_prices['BRL/TJ'] = fuel_prices['BRL/ktep']/ktoe_to_tj 
+fuel_prices = fuel_prices.set_index('﻿Combustivel')
+#fuel_prices.loc['Gas natural'] =fuel_prices.loc['Gas natural']/20
+
+"""interest rate"""
+interest_rate = 0.08
+
+
+
+
+
+
+#%%
+"""Optimization"""
+#Creating model
+#def optimization_module(year,emission):
+  
+  def optimization_module(year, emission_target, cap_exist, cum_new):
+      model = ConcreteModel()  
+  
+    """"For a givining Year and emission goal, the function will return mitigation measures, energy intensity, energy consumption, costs
+R1 = Route BOF using Coal
+R2 = Route BOF using Charcoal
+R3 = Route EAF using scrap
+R4 = Route Independet producers 
+"""
+    model = ConcreteModel()
+         
+    #Creating variables
+    k1 = mitigation_measures_dict['R1'].keys() #list of the number of energy mitigation measures
+    k2 = mitigation_measures_dict['R2'].keys()
+    k3 = mitigation_measures_dict['R3'].keys()
+    k4 =  mitigation_measures_dict['R4'].keys()
+    
+    # produção de inovações
+    model.X1 =  Var (k1,within =NonNegativeReals) #Energy efficiency mitigation measure in Route 1
+    model.X2 =  Var (k2,within =NonNegativeReals) #Energy efficiency mitigation measure in Route 2
+    model.X3 =  Var (k3,within =NonNegativeReals) #Energy efficiency mitigation measure in Route 3
+    model.X4 =  Var (k4,within =NonNegativeReals) #Energy efficiency mitigation measure in Route 4
+    model.X5= Var(within = NonNegativeReals) #DR-NG share 
+    model.X6 = Var(within = NonNegativeReals) #Charcoal share
+    model.X7 = Var(within = NonNegativeReals) #DR-H2 share
+    model.X8 = Var(within= NonNegativeReals) #Smelting Reduction share
+    model.X9 = Var(within = NonNegativeReals) #EAF
+    model.CCS = Var(within = NonNegativeReals) #CCS in BF
+    
+    
+    
+    ####novo
+    # --- nova variável: capacidade adicional anual por rota ---
+    model.newCap = Var(Rota, within=NonNegativeReals)
+    
+    
+    
+    # --- cálculo de produção (mantém o seu racional atual) ---
+    production_R1 = (float(steel_production.loc[year]['Share_BOF_MC'])-model.X5-model.X6-model.X7-model.X8-model.X9-model.CCS)*steel_production.loc[year]['Total']
+    production_R2 = steel_production.loc[year]['Total']*(model.X6 + steel_production.loc[year]['Share_BOF_CC'])
+    production_R3 = steel_production.loc[year]['Total']*(model.X9+steel_production.loc[year]['Share_EAF'])
+    production_R4 = pig_iron_production.loc[year]['Independente CV']
+    production_R5 = model.X5*steel_production.loc[year]['Total']
+    production_R6 = model.X7*steel_production.loc[year]['Total']
+    production_R7 = model.X8*steel_production.loc[year]['Total']
+    production_CCS = model.CCS*steel_production.loc[year]['Total']
+    
+    ####novo
+    # --- restrições de vida útil / capacidade ---
+    model.con = ConstraintList()
+    model.con.add(production_R1 <= cap_exist['R1'][year] + cum_new['R1'] + model.newCap['R1'])
+    model.con.add(production_R2 <= cap_exist['R2'][year] + cum_new['R2'] + model.newCap['R2'])
+    model.con.add(production_R3 <= cap_exist['R3'][year] + cum_new['R3'] + model.newCap['R3'])
+    model.con.add(production_R4 <= cap_exist['R4'][year] + cum_new['R4'] + model.newCap['R4'])
+    
+    
+    
+    # --- ajustes no CAPEX: custo de nova capacidade em vez de custo fixo por produção ---
+    # Remova o termo +170*production_R1/1000 do capex_R1 e substitua por:
+    capex_new_R1 = model.newCap['R1'] * 170   # US$ por unidade de capacidade instalada
+    # (faça o mesmo para R2, R3, R4, usando seus valores de CAPEX)
+    
+    
+    
+    
+    #Capex of each route
+capex_R1 = sum((mitigation_measures_dict['R1'][i]['CAPEX ($/t)']) * model.X1[i] * production_R1 / 1000 for i in k1) + 170 * model.newCap['R1']  #170 é o valor do capex
+capex_R2 = sum((mitigation_measures_dict['R2'][i]['CAPEX ($/t)']) * model.X2[i] * production_R2 / 1000 for i in k2) + 170 * model.newCap['R2']
+capex_R3 = sum((mitigation_measures_dict['R3'][i]['CAPEX ($/t)']) * model.X3[i] * production_R3 / 1000 for i in k3) + 184 * model.newCap['R3']
+    capex_R4 = sum((mitigation_measures_dict['R4'][i]['CAPEX ($/t)'])*model.X4[i]*production_R4/1000 for i in k4)
+    capex_R5 = (model.X5*steel_production.loc[year]['Total']*innovation_measures.loc[0]['CAPEX (Euro/t)']/1000)
+    capex_R6 = (model.X7*steel_production.loc[year]['Total']*innovation_measures.loc[2]['CAPEX (Euro/t)']/1000)
+    capex_R7 = (model.X8*steel_production.loc[year]['Total']*innovation_measures.loc[4]['CAPEX (Euro/t)']/1000)
+    capex_CCS = (model.CCS*steel_production.loc[year]['Total']*innovation_measures.loc[6]['CAPEX (Euro/t)']/1000) 
+         
+    #Capex of each route
+   # capex_R1 = sum((mitigation_measures_dict['R1'][i]['CAPEX ($/t)'])*model.X1[i]*production_R1/1000 for i in k1) +170*production_R1/1000 #170 é o capex
+   # capex_R2 = sum((mitigation_measures_dict['R2'][i]['CAPEX ($/t)'])*model.X2[i]*production_R2/1000 for i in k2)+170*production_R2/1000 #170 é o capex
+   # capex_R3 = sum((mitigation_measures_dict['R3'][i]['CAPEX ($/t)'])*model.X3[i]*production_R3/1000 for i in k3)+184*production_R3/1000
+   # capex_R4 = sum((mitigation_measures_dict['R4'][i]['CAPEX ($/t)'])*model.X4[i]*production_R4/1000 for i in k4)
+    # capex_R5 = (model.X5*steel_production.loc[year]['Total']*innovation_measures.loc[0]['CAPEX (Euro/t)']/1000)
+    # capex_R6 = (model.X7*steel_production.loc[year]['Total']*innovation_measures.loc[2]['CAPEX (Euro/t)']/1000)
+    #  capex_R7 = (model.X8*steel_production.loc[year]['Total']*innovation_measures.loc[4]['CAPEX (Euro/t)']/1000)
+    #  capex_CCS = (model.CCS*steel_production.loc[year]['Total']*innovation_measures.loc[6]['CAPEX (Euro/t)']/1000)
+   
+    
+    opex_R1 = sum(mitigation_measures_dict['R1'][i]['OPEX ($/t)'] * model.X1[i] * production_R1 / 1000 for i in k1) + opex_base['R1'] * model.newCap['R1']
+    opex_R2 = sum(mitigation_measures_dict['R2'][i]['OPEX ($/t)'] * model.X2[i] * production_R2 / 1000 for i in k2) + opex_base['R2'] * model.newCap['R2']
+    opex_R3 = sum(mitigation_measures_dict['R3'][i]['OPEX ($/t)'] * model.X3[i] * production_R3 / 1000 for i in k3) + opex_base['R3'] * model.newCap['R3']
+    opex_R4 = sum(mitigation_measures_dict['R4'][i]['OPEX ($/t)'] * model.X4[i] * production_R4 / 1000 for i in k4) + opex_base['R4'] * model.newCap['R4']
+    # opex_R1 = sum((mitigation_measures_dict['R1'][i]['OPEX ($/t)'])*model.X1[i]*production_R1/1000 for i in k1)+80*production_R1/1000 #80 é o opex base
+    #opex_R2 = sum((mitigation_measures_dict['R2'][i]['OPEX ($/t)'])*model.X2[i]*production_R2/1000 for i in k2)+80*production_R2/1000 #80 é o opex base
+    #opex_R3 = sum((mitigation_measures_dict['R3'][i]['OPEX ($/t)'])*model.X3[i]*production_R3/1000 for i in k3)+88*production_R3/1000 #80+10% é o opex base
+    #opex_R4 = sum((mitigation_measures_dict['R4'][i]['OPEX ($/t)'])*model.X4[i]*production_R4/1000 for i in k4)
+    opex_R5 = (model.X5*steel_production.loc[year]['Total']*innovation_measures.loc[0]['OPEX']/1000)
+    opex_R6 = (model.X7*steel_production.loc[year]['Total']*innovation_measures.loc[2]['OPEX']/1000)
+    opex_R7 = (model.X8*steel_production.loc[year]['Total']*innovation_measures.loc[4]['OPEX']/1000)
+    opex_CCS = (model.CCS*steel_production.loc[year]['Total']*innovation_measures.loc[6]['OPEX']/1000)
+    
+#Emission mitigated considering energy efficiency measures and fuel shift
+
+#aqui tem etapa!!!!!!!!!!!!!!!!!!!!!!!! terei que rever
+"""aqui tem etapa!!!!!!!!!!!!!!!!!!!!!!!! terei que rever"""
+"""['Step']]['2023'][x]/sum(EI_d"""
+
+
+    Emission_mitigated_R1 = sum(model.X1[i]*mitigation_measures_dict['R1'][i]['Energy reduction (Gj/t)']*sum(EI_dict['R1'][mitigation_measures_dict['R1'][i]['Step']]['2023'][x]/sum(EI_dict['R1'][mitigation_measures_dict['R1'][i]['Step']]['2023'].values())*emission_factor.loc[x]['CO2e'] for x in EI_dict['R1'][mitigation_measures_dict['R1'][i]['Step']]['2023']) for i in k1)*production_R1/10**6
+    Emission_mitigated_R2 = sum(model.X2[i]*mitigation_measures_dict['R2'][i]['Energy reduction (Gj/t)']*sum(EI_dict['R2'][mitigation_measures_dict['R2'][i]['Step']]['2023'][x]/sum(EI_dict['R2'][mitigation_measures_dict['R2'][i]['Step']]['2023'].values())*emission_factor.loc[x]['CO2e'] for x in EI_dict['R2'][mitigation_measures_dict['R2'][i]['Step']]['2023']) for i in k2)*production_R2/10**6
+    Emission_mitigated_R3 = sum(model.X3[i]*mitigation_measures_dict['R3'][i]['Energy reduction (Gj/t)']*sum(EI_dict['R3'][mitigation_measures_dict['R3'][i]['Step']]['2023'][x]/sum(EI_dict['R3'][mitigation_measures_dict['R3'][i]['Step']]['2023'].values())*emission_factor.loc[x]['CO2e'] for x in EI_dict['R3'][mitigation_measures_dict['R3'][i]['Step']]['2023']) for i in k3)*production_R3/10**6
+    Emission_mitigated_R4 = sum(model.X4[i]*mitigation_measures_dict['R4'][i]['Energy reduction (Gj/t)']*sum(EI_dict['R4'][mitigation_measures_dict['R4'][i]['Step']]['2023'][x]/sum(EI_dict['R4'][mitigation_measures_dict['R4'][i]['Step']]['2023'].values())*emission_factor.loc[x]['CO2e'] for x in EI_dict['R4'][mitigation_measures_dict['R4'][i]['Step']]['2023']) for i in k4)*production_R4/10**6
+
+#Energy consumption of new measures              
+    EC_R5_calc = +model.X5*steel_production.loc[year]['Total']*innovation_measures.loc[0]['Energy_intensity (GJ/t)']
+    EC_R6_calc = +model.X7*steel_production.loc[year]['Total']*innovation_measures.loc[2]['Energy_intensity (GJ/t)']
+    EC_R7_calc = +model.X8*steel_production.loc[year]['Total']*innovation_measures.loc[4]['Energy_intensity (GJ/t)']
+    
+    EF_CCS = (1-0.8)*(innovation_measures.loc[7]['Energy_intensity (GJ/t)']*emission_factor.loc['Carvao metalurgico']['CO2e']
+                 +innovation_measures.loc[8]['Energy_intensity (GJ/t)']*emission_factor.loc['Gas natural']['CO2e']
+                 +innovation_measures.loc[9]['Energy_intensity (GJ/t)']*emission_factor.loc['Oleo combustivel']['CO2e']
+                 ) #emission factor CO2e/t
+    
+    Unitario_preco_CCS = (innovation_measures.loc[6]['Energy_intensity (GJ/t)']*fuel_prices.loc['Eletricidade']['BRL/TJ']
+                           +innovation_measures.loc[7]['Energy_intensity (GJ/t)']*fuel_prices.loc['Carvao metalurgico']['BRL/TJ']
+                 +innovation_measures.loc[8]['Energy_intensity (GJ/t)']*fuel_prices.loc['Gas natural']['BRL/TJ']
+                 +innovation_measures.loc[9]['Energy_intensity (GJ/t)']*fuel_prices.loc['Oleo combustivel']['BRL/TJ']
+                 )
+    
+    #Energy consumption by route without energy efficiency measures:
+    EC_R1_no_measure = (float(R1_EI_Total[year]))*production_R1
+    EC_R2_no_measure=  (float(R2_EI_Total[year]))*production_R2
+    EC_R3_no_measure=+(float(R3_EI_Total[year]))*production_R3
+    EC_R4_no_measure= +(float(R4_EI_Total[year]))*production_R4
+    
+    Emission_Baseline = (
+            (EC_R1_no_measure*sum(Energy_share_R1.loc[f][year]*emission_factor.loc[f]['CO2e'] for f in Energy_share_R1.index)/10**6
+            +EC_R2_no_measure * sum(Energy_share_R2.loc[f][year]*emission_factor.loc[f]['CO2e'] for f in Energy_share_R2.index)/10**6
+            +EC_R3_no_measure *sum(Energy_share_R3.loc[f][year]*emission_factor.loc[f]['CO2e'] for f in Energy_share_R3.index)/10**6
+            +EC_R4_no_measure*sum(Energy_share_R4.loc[f][year]*emission_factor.loc[f]['CO2e'] for f in Energy_share_R4.index)/10**6)
+            
+            )
+    
+##    Fuel cost when applying mitigation measures: REFAZER
+    #Acho que posso estar esquecendo de colocar o acréscimo do custo de combustíveis ao usar carvão vegetal
+    #Energy saving = Penetration of a given technology * Reduction in GJ/t  * (energy share * fuel price) * production
+    Energy_saving_R1 = sum(model.X1[i]*mitigation_measures_dict['R1'][i]['Energy reduction (Gj/t)']*sum(EI_dict['R1'][mitigation_measures_dict['R1'][i]['Step']]['2023'][x]/sum(EI_dict['R1'][mitigation_measures_dict['R1'][i]['Step']]['2023'].values())*fuel_prices.loc[x]['BRL/TJ'] for x in EI_dict['R1'][mitigation_measures_dict['R1'][i]['Step']]['2023']) for i in k1)*production_R1/10**6
+    Energy_saving_R2 = sum(model.X2[i]*mitigation_measures_dict['R2'][i]['Energy reduction (Gj/t)']*sum(EI_dict['R2'][mitigation_measures_dict['R2'][i]['Step']]['2023'][x]/sum(EI_dict['R2'][mitigation_measures_dict['R2'][i]['Step']]['2023'].values())*fuel_prices.loc[x]['BRL/TJ'] for x in EI_dict['R2'][mitigation_measures_dict['R2'][i]['Step']]['2023']) for i in k2)*production_R2/10**6
+    Energy_saving_R3 = sum(model.X3[i]*mitigation_measures_dict['R3'][i]['Energy reduction (Gj/t)']*sum(EI_dict['R3'][mitigation_measures_dict['R3'][i]['Step']]['2023'][x]/sum(EI_dict['R3'][mitigation_measures_dict['R3'][i]['Step']]['2023'].values())*fuel_prices.loc[x]['BRL/TJ'] for x in EI_dict['R3'][mitigation_measures_dict['R3'][i]['Step']]['2023']) for i in k3)*production_R3/10**6
+    Energy_saving_R4 = sum(model.X4[i]*mitigation_measures_dict['R4'][i]['Energy reduction (Gj/t)']*sum(EI_dict['R4'][mitigation_measures_dict['R4'][i]['Step']]['2023'][x]/sum(EI_dict['R4'][mitigation_measures_dict['R4'][i]['Step']]['2023'].values())*fuel_prices.loc[x]['BRL/TJ'] for x in EI_dict['R4'][mitigation_measures_dict['R4'][i]['Step']]['2023']) for i in k4)*production_R4/10**6
+
+    Energy_cost_innovation = (
+            +(model.X5*steel_production.loc[year]['Total']*innovation_measures.loc[0]['Energy_intensity (GJ/t)'] + model.X7*steel_production.loc[year]['Total']*innovation_measures.loc[2]['Energy_intensity (GJ/t)']+model.CCS*steel_production.loc[year]['Total']*innovation_measures.loc[8]['Energy_intensity (GJ/t)'])*fuel_prices.loc['Gas natural']['BRL/TJ']/10**6
+    +(model.X8*steel_production.loc[year]['Total']*innovation_measures.loc[4]['Energy_intensity (GJ/t)'])*fuel_prices.loc['Carvao vegetal']['BRL/TJ']/10**6
+    +(model.X5*steel_production.loc[year]['Total']*innovation_measures.loc[1]['Energy_intensity (GJ/t)'] + model.X7*steel_production.loc[year]['Total']*innovation_measures.loc[3]['Energy_intensity (GJ/t)']+model.X8*steel_production.loc[year]['Total']*innovation_measures.loc[5]['Energy_intensity (GJ/t)']+model.CCS*steel_production.loc[year]['Total']*innovation_measures.loc[6]['Energy_intensity (GJ/t)'])*fuel_prices.loc['Eletricidade']['BRL/TJ']/10**6
+    +model.CCS*innovation_measures.loc[7]['Energy_intensity (GJ/t)']*fuel_prices.loc['Carvao metalurgico']['BRL/TJ']*steel_production.loc[year]['Total']
+    +model.CCS*innovation_measures.loc[9]['Energy_intensity (GJ/t)']*fuel_prices.loc['Oleo combustivel']['BRL/TJ']*steel_production.loc[year]['Total']
+    )
+  
+#    Fuel economy: Fuel cost A - Fuel cost saving
+    fuel_saving = (Energy_saving_R1+ Energy_saving_R2 + Energy_saving_R3+ Energy_saving_R4)
+        
+    fuel_cost = sum(EC_R1_no_measure*Energy_share_R1[year][fuel]*fuel_prices.loc[fuel]['BRL/TJ']
+    +EC_R2_no_measure*Energy_share_R2[year][fuel]*fuel_prices.loc[fuel]['BRL/TJ']
+    +EC_R3_no_measure*Energy_share_R3[year][fuel]*fuel_prices.loc[fuel]['BRL/TJ']
+    +EC_R4_no_measure*Energy_share_R4[year][fuel]*fuel_prices.loc[fuel]['BRL/TJ'] for fuel in Energy_share_R1.index)/10**6
+    
+    levelized = interest_rate*((1+interest_rate)**20)/((1+interest_rate)**20-1)
+    
+    capex_total = (capex_R1 + capex_R2+capex_R3 + capex_R4 + capex_R5+ capex_R6+capex_R7+capex_CCS)*levelized
+#    capex_total = (capex_R1+ capex_R2+capex_R3 + capex_R4 + capex_R5+ capex_R6+capex_R7+capex_CCS)*interest_rate*((1+interest_rate)**20)/((1+interest_rate)**20-1)
+    opex_total =     opex_R1+opex_R2+opex_R3+opex_R4+opex_R5+opex_R6+opex_R7+opex_CCS
+
+    model.obj= Objective(expr =(capex_total
+                         +opex_total
+                         +(fuel_cost+Energy_cost_innovation-fuel_saving)/dolar)
+    )
+    
+    #Restrictions
+    model.con = ConstraintList()
+    
+    ##Penetration
+    for i in k1:
+        model.con.add(model.X1[i] <= float(mitigation_measures_dict['R1'][i]['Penetration']))
+    for i in k2:
+        model.con.add (model.X2[i]<=float(mitigation_measures_dict['R2'][i]['Penetration']))
+    for i in k3:
+        model.con.add (model.X3[i]<=float(mitigation_measures_dict['R3'][i]['Penetration']))
+    for i in k4:
+        model.con.add (model.X4[i]<=float(mitigation_measures_dict['R4'][i]['Penetration']))
+        
+           
+    model.con.add(model.X5<=innovation_measures.loc[0]['Penetration']) #NG
+    # model.con.add(model.X5<=0.25) #NG in REF scenario
+    model.con.add(model.X6+steel_production['Share_BOF_CC'][year]<=0.16) #charcoal limite
+    model.con.add(model.X7<=penetration_inovative[str(year)]['DR-H2']) #H2
+    model.con.add(model.X8<=penetration_inovative[str(year)]['SR']) #SR
+    model.con.add(model.X8<=0.0) #SR
+#    model.con.add(model.X9+steel_production['Share_EAF'][year]<=0.3) #EAF
+#    model.con.add(model.X6+steel_production['Share_BOF_CC'][year]+model.X8<=0.50)
+    model.con.add(model.X5+model.X6+model.X7+model.X8 +model.X9+model.CCS <= float(steel_production.loc[year]['Share_BOF_MC']))
+    model.con.add(model.CCS<=penetration_inovative[str(year)]['BF-BOF-CCS'])
+    
+
+    if year ==2023:
+        pass
+    else:
+        model.con.add((model.X5+model.X7)*steel_production['Total'][year]>=Results[year-1]['H2']*steel_production['Total'][year-1]+Results[year-1]['GN']*steel_production['Total'][year-1])
+#        model.con.add(model.X8*steel_production['Total'][year]>=Results[year-1]['SR']*steel_production['Total'][year-1])
+
+
+    #Add restriction to charcoal consumption    
+    model.con.add(model.X8*steel_production.loc[year]['Total']*innovation_measures.loc[4]['Energy_intensity (GJ/t)'] 
++((EC_R1_no_measure*Energy_share_R1.loc['Carvao vegetal'][year]
+            +EC_R2_no_measure *Energy_share_R2.loc['Carvao vegetal'][year]
+            +EC_R3_no_measure *Energy_share_R3.loc['Carvao vegetal'][year]
+            +EC_R4_no_measure*Energy_share_R4.loc['Carvao vegetal'][year]     
+            )
+        -(sum(model.X1[i]*mitigation_measures_dict['R1'][i]['Energy reduction (Gj/t)']*EI_dict['R1'][mitigation_measures_dict['R1'][i]['Step']]['2023']['Carvao vegetal']/sum(EI_dict['R1'][mitigation_measures_dict['R1'][i]['Step']]['2023'].values()) for i in k1)*production_R1
+    +sum(model.X2[i]*mitigation_measures_dict['R2'][i]['Energy reduction (Gj/t)']*EI_dict['R2'][mitigation_measures_dict['R2'][i]['Step']]['2023']['Carvao vegetal']/sum(EI_dict['R2'][mitigation_measures_dict['R2'][i]['Step']]['2023'].values()) for i in k2)*production_R2
+     +sum(model.X3[i]*mitigation_measures_dict['R3'][i]['Energy reduction (Gj/t)']*EI_dict['R3'][mitigation_measures_dict['R3'][i]['Step']]['2023']['Carvao vegetal']/sum(EI_dict['R3'][mitigation_measures_dict['R3'][i]['Step']]['2023'].values()) for i in k3)*production_R3
+    +sum(model.X4[i]*mitigation_measures_dict['R4'][i]['Energy reduction (Gj/t)']*EI_dict['R4'][mitigation_measures_dict['R4'][i]['Step']]['2023']['Carvao vegetal']/sum(EI_dict['R4'][mitigation_measures_dict['R4'][i]['Step']]['2023'].values()) for i in k4)*production_R4
+)
+    )
+        <= 576812*0.8)
+        # <= 692750)
+        #Potential is equal to 3 845 418 GJ // 449.280.000
+    
+    #Scrap consumption
+    model.con.add((model.X9+steel_production['Share_EAF'][year])*steel_production.loc[year]['Total']*.85<= scrap_supply[str(year)]['High'])
+    
+    #exemplo de como posso fazer o calculo das emissoes
+    def emission_calc_route (route):
+        emission = 0
+        for step in EI_dict[route].keys():
+            emission = emission+sum(EI_dict[route][step]['2023'][f]*emission_factor.loc[f]['CO2e'] for f in EI_dict[route][step]['2023'].keys())
+        return emission
+    
+    Emission_R1 = emission_calc_route('R1')
+    Emission_R2 = emission_calc_route('R2')
+    Emission_R3 = emission_calc_route('R3')
+    Emission_R4 = emission_calc_route('R4')
+    #Emission_R1 = sum(EI_dict['R1']['Alto-forno']['2023'][f]*emission_factor.loc[f]['CO2e'] for f in EI_dict['R1']['Alto-forno']['2023'].keys())
+
+    #Tem que colocar o 5 e o 6 como redução das emissões.
+    model.con.add(
+            Emission_Baseline
+            -(Emission_mitigated_R1
+            +Emission_mitigated_R2
+            +Emission_mitigated_R3
+            +Emission_mitigated_R4)
+            +EC_R5_calc*emission_factor.loc['Gas natural']['CO2e']/10**6
+            +EC_R6_calc*emission_factor.loc['Gas natural']['CO2e']/10**6
+            +EC_R7_calc*emission_factor.loc['Carvao vegetal']['CO2e']/10**6
+            +model.CCS*EF_CCS*steel_production['Total'][year]/10**6
+            -steel_production['Total'][year]*carbon_content*44/12/10**3
+            ==emission
+            )
+    
+    
+    # Solving the problem:
+    solver = SolverFactory('ipopt')
+    result_solver = solver.solve(model, tee = True)
+    
+    CE =(
+            EC_R1_no_measure()*Energy_share_R1[year]
+            +EC_R2_no_measure()*Energy_share_R2[year]
+            +EC_R3_no_measure()*Energy_share_R3[year]
+            +EC_R4_no_measure*Energy_share_R4[year]
+            )
+
+    for fuel in CE.index:
+        CE[fuel] = (CE[fuel]
+        -sum(model.X1[i]()*mitigation_measures_dict['R1'][i]['Energy reduction (Gj/t)']*EI_dict['R1'][mitigation_measures_dict['R1'][i]['Step']]['2023'][fuel]/sum(EI_dict['R1'][mitigation_measures_dict['R1'][i]['Step']]['2023'].values()) for i in k1)*production_R1()
+        -sum(model.X2[i]()*mitigation_measures_dict['R2'][i]['Energy reduction (Gj/t)']*EI_dict['R2'][mitigation_measures_dict['R2'][i]['Step']]['2023'][fuel]/sum(EI_dict['R2'][mitigation_measures_dict['R2'][i]['Step']]['2023'].values())for i in k2)*production_R2()
+        -sum(model.X3[i]()*mitigation_measures_dict['R3'][i]['Energy reduction (Gj/t)']*EI_dict['R3'][mitigation_measures_dict['R3'][i]['Step']]['2023'][fuel]/sum(EI_dict['R3'][mitigation_measures_dict['R3'][i]['Step']]['2023'].values()) for i in k3)*production_R3()
+        -sum(model.X4[i]()*mitigation_measures_dict['R4'][i]['Energy reduction (Gj/t)']*EI_dict['R4'][mitigation_measures_dict['R4'][i]['Step']]['2023'][fuel]/sum(EI_dict['R4'][mitigation_measures_dict['R4'][i]['Step']]['2023'].values()) for i in k4)*production_R4
+        )
+#    
+    #Summing the energy consumption from innovative measures (SR, H-DR, GN-DR, BF-BOF CCS:
+    CE['Gas natural'] = (CE['Gas natural']
+    +model.X5()*steel_production.loc[year]['Total']*innovation_measures.loc[0]['Energy_intensity (GJ/t)'] 
+      + model.X7()*steel_production.loc[year]['Total']*innovation_measures.loc[2]['Energy_intensity (GJ/t)']
+      + model.CCS()*steel_production.loc[year]['Total']*innovation_measures.loc[7]['Energy_intensity (GJ/t)']
+      )
+    
+    CE['Eletricidade'] = (
+            CE['Eletricidade']
+            +model.X5()*steel_production.loc[year]['Total']*innovation_measures.loc[1]['Energy_intensity (GJ/t)'] 
+            + model.X7()*steel_production.loc[year]['Total']*innovation_measures.loc[3]['Energy_intensity (GJ/t)']
+            +model.X8()*steel_production.loc[year]['Total']*innovation_measures.loc[5]['Energy_intensity (GJ/t)']
+            +model.CCS()*steel_production.loc[year]['Total']*innovation_measures.loc[6]['Energy_intensity (GJ/t)']
+            )
+    
+    CE['Carvao vegetal'] = (
+            CE['Carvao vegetal']
+            +model.X8()*steel_production.loc[year]['Total']*innovation_measures.loc[4]['Energy_intensity (GJ/t)'])
+    
+    CE['Carvao metalurgico'] =(CE['Carvao metalurgico']
+            +model.CCS()*steel_production.loc[year]['Total']*innovation_measures.loc[7]['Energy_intensity (GJ/t)']
+    )
+    
+    CE['Oleo combustivel'] =(CE['Oleo combustivel'] 
+    +model.CCS()*steel_production.loc[year]['Total']*innovation_measures.loc[9]['Energy_intensity (GJ/t)']
+    )
+    
+    #Gerando resultado agregado do capex eficiência
+    capex_eficiencia = (sum((mitigation_measures_dict['R1'][i]['CAPEX ($/t)'])*model.X1[i]()*production_R1/1000 for i in k1)
+                        +sum((mitigation_measures_dict['R2'][i]['CAPEX ($/t)'])*model.X2[i]()*production_R2/1000 for i in k2)
+                        +sum((mitigation_measures_dict['R3'][i]['CAPEX ($/t)'])*model.X3[i]()*production_R3/1000 for i in k3)
+                        +sum((mitigation_measures_dict['R4'][i]['CAPEX ($/t)'])*model.X4[i]()*production_R4/1000 for i in k4)
+                        )()*levelized
+    
+    opex_eficiencia = (sum((mitigation_measures_dict['R1'][i]['OPEX ($/t)'])*model.X1[i]()*production_R1/1000 for i in k1)
+                         +sum((mitigation_measures_dict['R2'][i]['OPEX ($/t)'])*model.X2[i]()*production_R2/1000 for i in k2)
+                         +sum((mitigation_measures_dict['R3'][i]['OPEX ($/t)'])*model.X3[i]()*production_R3/1000 for i in k3)
+                         +sum((mitigation_measures_dict['R4'][i]['OPEX ($/t)'])*model.X4[i]()*production_R4/1000 for i in k4)
+                         )()
+    
+    -fuel_saving() #Fuel saving da eficiencia
+
+#mitigação das medidas de eficiência energética    
+    mitigacao_eficiencia = (Emission_mitigated_R1
+    +Emission_mitigated_R2
+    +Emission_mitigated_R3
+    +Emission_mitigated_R4)()
+
+#Mitigação das rotas
+        
+    EI_R1 = ((EC_R1_no_measure*sum(Energy_share_R1.loc[f][year]*emission_factor.loc[f]['CO2e'] for f in Energy_share_R1.index)/10**6)() - Emission_mitigated_R1())/production_R1()*1000
+    EI_R2 = ((EC_R2_no_measure*sum(Energy_share_R2.loc[f][year]*emission_factor.loc[f]['CO2e'] for f in Energy_share_R2.index)/10**6)() - Emission_mitigated_R2())/production_R2()*1000
+    EI_R3 = ((EC_R3_no_measure*sum(Energy_share_R3.loc[f][year]*emission_factor.loc[f]['CO2e'] for f in Energy_share_R3.index)/10**6)() - Emission_mitigated_R3())/production_R3()*1000
+    EI_R5 = EC_R5_calc()*emission_factor.loc['Gas natural']['CO2e']/10**6/production_R5() * 1000
+    EI_R6 = 0 #é zero mesmo
+    EI_R7 = EC_R7_calc()*emission_factor.loc['Carvao vegetal']['CO2e']/10**6/production_R7() * 1000
+
+    R2_mitigacao = (EI_R1-EI_R2)*model.X6()*steel_production.loc[year]['Total']
+    R3_mitigacao = (EI_R1-EI_R3)*model.X9()*steel_production.loc[year]['Total']
+    R5_mitigacao = (EI_R1-EI_R5)*production_R5()
+    R6_mitigacao = (EI_R1-EI_R6)*production_R6()
+    R7_mitigacao = (EI_R1-EI_R7)*production_R7()
+    
+    mitigacao_total = mitigacao_eficiencia*1000 + R2_mitigacao + R3_mitigacao + R5_mitigacao + R6_mitigacao + R7_mitigacao
+    
+#Diferença do CAPEX    
+    R2_capex_mitigacao = -(.170 -.170)*model.X6()*steel_production.loc[year]['Total']*levelized
+    R3_capex_mitigacao = -(.170 -.184)*model.X9()*steel_production.loc[year]['Total']*levelized
+    # (capex_R1()/production_R1() -capex_R4()/production_R4)*production_R4
+    R5_capex_mitigacao = -(.170 -capex_R5()/production_R5())*production_R5()*levelized
+    R6_capex_mitigacao = -(.170 -capex_R6()/production_R6())*production_R6()*levelized
+    R7_capex_mitigacao = -(.170 -capex_R7()/production_R7())*production_R7()*levelized
+       
+
+#diferença do OPEX
+    R2_opex_mitigacao = -(opex_R1()/production_R1() -opex_R2()/production_R2())*model.X6()*steel_production.loc[year]['Total']
+    R3_opex_mitigacao = -(opex_R1()/production_R1() -opex_R3()/production_R3())*model.X9()*steel_production.loc[year]['Total']
+    # (opex_R1()/production_R1() -opex_R4()/production_R4)*production_R4
+    R5_opex_mitigacao = -(opex_R1()/production_R1() -opex_R5()/production_R5())*production_R5()
+    R6_opex_mitigacao = -(opex_R1()/production_R1() -opex_R6()/production_R6())*production_R6()
+    R7_opex_mitigacao = -(opex_R1()/production_R1() -opex_R7()/production_R7())*production_R7()
+
+#Custos unitários de combustível
+    custo_comb_R1 = (sum(EC_R1_no_measure*Energy_share_R1[year][fuel]*fuel_prices.loc[fuel]['BRL/TJ'] for fuel in Energy_share_R1.index)/10**6)()/dolar/production_R1()
+    # custo_comb_R1 = ((sum(EC_R1_no_measure*Energy_share_R1[year][fuel]*fuel_prices.loc[fuel]['BRL/TJ'] for fuel in Energy_share_R1.index)/10**6)() - Energy_saving_R1())/dolar/production_R1()
+    custo_comb_R2 = (sum(EC_R2_no_measure*Energy_share_R2[year][fuel]*fuel_prices.loc[fuel]['BRL/TJ'] for fuel in Energy_share_R1.index)/10**6)()/dolar/production_R2()
+    custo_comb_R3 = (sum(EC_R3_no_measure*Energy_share_R3[year][fuel]*fuel_prices.loc[fuel]['BRL/TJ'] for fuel in Energy_share_R1.index)/10**6)()/dolar/production_R3()
+    custo_comb_R5 = (model.X5()*steel_production.loc[year]['Total']*innovation_measures.loc[0]['Energy_intensity (GJ/t)']*fuel_prices.loc['Gas natural']['BRL/TJ']
+                         +model.X5()*steel_production.loc[year]['Total']*innovation_measures.loc[1]['Energy_intensity (GJ/t)']*fuel_prices.loc['Eletricidade']['BRL/TJ'])/10**6/dolar/production_R5()
+    custo_comb_R6 = (model.X7()*steel_production.loc[year]['Total']*innovation_measures.loc[2]['Energy_intensity (GJ/t)']*fuel_prices.loc['Gas natural']['BRL/TJ']
+                         +model.X7()*steel_production.loc[year]['Total']*innovation_measures.loc[3]['Energy_intensity (GJ/t)']*fuel_prices.loc['Eletricidade']['BRL/TJ'])/10**6/dolar/production_R6()
+    custo_comb_R7 = (model.X8()*steel_production.loc[year]['Total']*innovation_measures.loc[4]['Energy_intensity (GJ/t)']*fuel_prices.loc['Carvao vegetal']['BRL/TJ']
+                         +model.X8()*steel_production.loc[year]['Total']*innovation_measures.loc[5]['Energy_intensity (GJ/t)']*fuel_prices.loc['Eletricidade']['BRL/TJ'])/10**6/dolar/production_R7()
+    
+    R2_economia_comb = (custo_comb_R2-custo_comb_R1)*model.X6()*steel_production.loc[year]['Total']
+    R3_economia_comb = (custo_comb_R3-custo_comb_R1)*model.X9()*steel_production.loc[year]['Total']
+    R5_economia_comb = (custo_comb_R5-custo_comb_R1)*production_R5()
+    R6_economia_comb = (custo_comb_R6-custo_comb_R1)*production_R6()
+    R7_economia_comb = (custo_comb_R7-custo_comb_R1)*production_R7()
+
+    
+    mitigacao = {
+        'Capex':{
+            'Carvao vegetal':R2_capex_mitigacao,
+            'EAF': R3_capex_mitigacao,
+            'DR-GN': R5_capex_mitigacao,
+            'DR-H2': R6_capex_mitigacao,
+            'SR-CV' : R7_capex_mitigacao,
+            'Eficiencia':capex_eficiencia
+            },
+        'Opex':{
+            'Carvao vegetal':R2_opex_mitigacao,
+            'EAF': R3_opex_mitigacao,
+            'DR-GN': R5_opex_mitigacao,
+            'DR-H2': R6_opex_mitigacao,
+            'SR-CV' : R7_opex_mitigacao,
+            'Eficiencia': opex_eficiencia
+            },
+        'Gasto comb':{
+            'Carvao vegetal':R2_economia_comb,
+            'EAF': R3_economia_comb,
+            'DR-GN': R5_economia_comb,
+            'DR-H2': R6_economia_comb,
+            'SR-CV' : R7_economia_comb,
+            'Eficiencia' : -fuel_saving()/1000
+            },
+        'Mitigacao':{
+            'Carvao vegetal':R2_mitigacao,
+            'EAF': R3_mitigacao,
+            'DR-GN': R5_mitigacao,
+            'DR-H2': R6_mitigacao,
+            'SR-CV' : R7_mitigacao,
+            'Eficiencia' : mitigacao_eficiencia*1000
+            }
+        }
+        
+        
+        
+    return model,capex_total,CE ,mitigacao , opex_total
+
+
+
+
+#%%
+"""Optimization"""
+#Creating model
+#def optimization_module(year,emission):
+  
+  def optimization_module(year, emission_target, cap_exist, cum_new):
+      model = ConcreteModel()  
+  
+    """"For a givining Year and emission goal, the function will return mitigation measures, energy intensity, energy consumption, costs
+R1 = Route BOF using Coal
+R2 = Route BOF using Charcoal
+R3 = Route EAF using scrap
+R4 = Route Independet producers 
+"""
+    model = ConcreteModel()
+         
+    #Creating variables
+    k1 = mitigation_measures_dict['R1'].keys() #list of the number of energy mitigation measures
+    k2 = mitigation_measures_dict['R2'].keys()
+    k3 = mitigation_measures_dict['R3'].keys()
+    k4 =  mitigation_measures_dict['R4'].keys()
+    
+    # produção de inovações
+    model.X1 =  Var (k1,within =NonNegativeReals) #Energy efficiency mitigation measure in Route 1
+    model.X2 =  Var (k2,within =NonNegativeReals) #Energy efficiency mitigation measure in Route 2
+    model.X3 =  Var (k3,within =NonNegativeReals) #Energy efficiency mitigation measure in Route 3
+    model.X4 =  Var (k4,within =NonNegativeReals) #Energy efficiency mitigation measure in Route 4
+    model.X5= Var(within = NonNegativeReals) #DR-NG share 
+    model.X6 = Var(within = NonNegativeReals) #Charcoal share
+    model.X7 = Var(within = NonNegativeReals) #DR-H2 share
+    model.X8 = Var(within= NonNegativeReals) #Smelting Reduction share
+    model.X9 = Var(within = NonNegativeReals) #EAF
+    model.CCS = Var(within = NonNegativeReals) #CCS in BF
+    
+    
+    
+    ####novo
+    # --- nova variável: capacidade adicional anual por rota ---
+    model.newCap = Var(routes, within=NonNegativeReals)
+    
+    
+    
+    # --- cálculo de produção (mantém o seu racional atual) ---
+    production_R1 = (float(steel_production.loc[year]['Share_BOF_MC'])-model.X5-model.X6-model.X7-model.X8-model.X9-model.CCS)*steel_production.loc[year]['Total']
+    production_R2 = steel_production.loc[year]['Total']*(model.X6 + steel_production.loc[year]['Share_BOF_CC'])
+    production_R3 = steel_production.loc[year]['Total']*(model.X9+steel_production.loc[year]['Share_EAF'])
+    production_R4 = pig_iron_production.loc[year]['Independente CV']
+    production_R5 = model.X5*steel_production.loc[year]['Total']
+    production_R6 = model.X7*steel_production.loc[year]['Total']
+    production_R7 = model.X8*steel_production.loc[year]['Total']
+    production_CCS = model.CCS*steel_production.loc[year]['Total']
+    
+    ####novo
+    # --- restrições de vida útil / capacidade ---
+    model.con = ConstraintList()
+    model.con.add(production_R1 <= cap_exist['R1'][year] + cum_new['R1'] + model.newCap['R1'])
+    model.con.add(production_R2 <= cap_exist['R2'][year] + cum_new['R2'] + model.newCap['R2'])
+    model.con.add(production_R3 <= cap_exist['R3'][year] + cum_new['R3'] + model.newCap['R3'])
+    model.con.add(production_R4 <= cap_exist['R4'][year] + cum_new['R4'] + model.newCap['R4'])
+    
+    
+    
+    # --- ajustes no CAPEX: custo de nova capacidade em vez de custo fixo por produção ---
+    # Remova o termo +170*production_R1/1000 do capex_R1 e substitua por:
+    capex_new_R1 = model.newCap['R1'] * 170   # US$ por unidade de capacidade instalada
+    # (faça o mesmo para R2, R3, R4, usando seus valores de CAPEX)
+    
+    
+    #Capex of each route
+    capex_R1 = sum((mitigation_measures_dict['R1'][i]['CAPEX ($/t)'])*model.X1[i]*production_R1/1000 for i in k1) +170*production_R1/1000 #170 é o capex
+    capex_R2 = sum((mitigation_measures_dict['R2'][i]['CAPEX ($/t)'])*model.X2[i]*production_R2/1000 for i in k2)+170*production_R2/1000 #170 é o capex
+    capex_R3 = sum((mitigation_measures_dict['R3'][i]['CAPEX ($/t)'])*model.X3[i]*production_R3/1000 for i in k3)+184*production_R3/1000
+    capex_R4 = sum((mitigation_measures_dict['R4'][i]['CAPEX ($/t)'])*model.X4[i]*production_R4/1000 for i in k4)
+    capex_R5 = (model.X5*steel_production.loc[year]['Total']*innovation_measures.loc[0]['CAPEX (Euro/t)']/1000)
+    capex_R6 = (model.X7*steel_production.loc[year]['Total']*innovation_measures.loc[2]['CAPEX (Euro/t)']/1000)
+    capex_R7 = (model.X8*steel_production.loc[year]['Total']*innovation_measures.loc[4]['CAPEX (Euro/t)']/1000)
+    capex_CCS = (model.CCS*steel_production.loc[year]['Total']*innovation_measures.loc[6]['CAPEX (Euro/t)']/1000)
+    
+    
+    
+    
+    
+    #Capex of each route
+   # capex_R1 = sum((mitigation_measures_dict['R1'][i]['CAPEX ($/t)'])*model.X1[i]*production_R1/1000 for i in k1) +170*production_R1/1000 #170 é o capex
+   # capex_R2 = sum((mitigation_measures_dict['R2'][i]['CAPEX ($/t)'])*model.X2[i]*production_R2/1000 for i in k2)+170*production_R2/1000 #170 é o capex
+   # capex_R3 = sum((mitigation_measures_dict['R3'][i]['CAPEX ($/t)'])*model.X3[i]*production_R3/1000 for i in k3)+184*production_R3/1000
+   # capex_R4 = sum((mitigation_measures_dict['R4'][i]['CAPEX ($/t)'])*model.X4[i]*production_R4/1000 for i in k4)
+    # capex_R5 = (model.X5*steel_production.loc[year]['Total']*innovation_measures.loc[0]['CAPEX (Euro/t)']/1000)
+    # capex_R6 = (model.X7*steel_production.loc[year]['Total']*innovation_measures.loc[2]['CAPEX (Euro/t)']/1000)
+    #  capex_R7 = (model.X8*steel_production.loc[year]['Total']*innovation_measures.loc[4]['CAPEX (Euro/t)']/1000)
+    #  capex_CCS = (model.CCS*steel_production.loc[year]['Total']*innovation_measures.loc[6]['CAPEX (Euro/t)']/1000)
+    
+    opex_R1 = sum((mitigation_measures_dict['R1'][i]['OPEX ($/t)'])*model.X1[i]*production_R1/1000 for i in k1)+80*production_R1/1000 #80 é o opex base
+    opex_R2 = sum((mitigation_measures_dict['R2'][i]['OPEX ($/t)'])*model.X2[i]*production_R2/1000 for i in k2)+80*production_R2/1000 #80 é o opex base
+    opex_R3 = sum((mitigation_measures_dict['R3'][i]['OPEX ($/t)'])*model.X3[i]*production_R3/1000 for i in k3)+88*production_R3/1000 #80+10% é o opex base
+    opex_R4 = sum((mitigation_measures_dict['R4'][i]['OPEX ($/t)'])*model.X4[i]*production_R4/1000 for i in k4)
+    opex_R5 = (model.X5*steel_production.loc[year]['Total']*innovation_measures.loc[0]['OPEX']/1000)
+    opex_R6 = (model.X7*steel_production.loc[year]['Total']*innovation_measures.loc[2]['OPEX']/1000)
+    opex_R7 = (model.X8*steel_production.loc[year]['Total']*innovation_measures.loc[4]['OPEX']/1000)
+    opex_CCS = (model.CCS*steel_production.loc[year]['Total']*innovation_measures.loc[6]['OPEX']/1000)
+    
+#    Emission mitigated considering energy efficiency measures and fuel shift
+    Emission_mitigated_R1 = sum(model.X1[i]*mitigation_measures_dict['R1'][i]['Energy reduction (Gj/t)']*sum(EI_dict['R1'][mitigation_measures_dict['R1'][i]['Step']]['2023'][x]/sum(EI_dict['R1'][mitigation_measures_dict['R1'][i]['Step']]['2023'].values())*emission_factor.loc[x]['CO2e'] for x in EI_dict['R1'][mitigation_measures_dict['R1'][i]['Step']]['2023']) for i in k1)*production_R1/10**6
+    Emission_mitigated_R2 = sum(model.X2[i]*mitigation_measures_dict['R2'][i]['Energy reduction (Gj/t)']*sum(EI_dict['R2'][mitigation_measures_dict['R2'][i]['Step']]['2023'][x]/sum(EI_dict['R2'][mitigation_measures_dict['R2'][i]['Step']]['2023'].values())*emission_factor.loc[x]['CO2e'] for x in EI_dict['R2'][mitigation_measures_dict['R2'][i]['Step']]['2023']) for i in k2)*production_R2/10**6
+    Emission_mitigated_R3 = sum(model.X3[i]*mitigation_measures_dict['R3'][i]['Energy reduction (Gj/t)']*sum(EI_dict['R3'][mitigation_measures_dict['R3'][i]['Step']]['2023'][x]/sum(EI_dict['R3'][mitigation_measures_dict['R3'][i]['Step']]['2023'].values())*emission_factor.loc[x]['CO2e'] for x in EI_dict['R3'][mitigation_measures_dict['R3'][i]['Step']]['2023']) for i in k3)*production_R3/10**6
+    Emission_mitigated_R4 = sum(model.X4[i]*mitigation_measures_dict['R4'][i]['Energy reduction (Gj/t)']*sum(EI_dict['R4'][mitigation_measures_dict['R4'][i]['Step']]['2023'][x]/sum(EI_dict['R4'][mitigation_measures_dict['R4'][i]['Step']]['2023'].values())*emission_factor.loc[x]['CO2e'] for x in EI_dict['R4'][mitigation_measures_dict['R4'][i]['Step']]['2023']) for i in k4)*production_R4/10**6
+
+#Energy consumption of new measures              
+    EC_R5_calc = +model.X5*steel_production.loc[year]['Total']*innovation_measures.loc[0]['Energy_intensity (GJ/t)']
+    EC_R6_calc = +model.X7*steel_production.loc[year]['Total']*innovation_measures.loc[2]['Energy_intensity (GJ/t)']
+    EC_R7_calc = +model.X8*steel_production.loc[year]['Total']*innovation_measures.loc[4]['Energy_intensity (GJ/t)']
+    
+    EF_CCS = (1-0.8)*(innovation_measures.loc[7]['Energy_intensity (GJ/t)']*emission_factor.loc['Carvao metalurgico']['CO2e']
+                 +innovation_measures.loc[8]['Energy_intensity (GJ/t)']*emission_factor.loc['Gas natural']['CO2e']
+                 +innovation_measures.loc[9]['Energy_intensity (GJ/t)']*emission_factor.loc['Oleo combustivel']['CO2e']
+                 ) #emission factor CO2e/t
+    
+    Unitario_preco_CCS = (innovation_measures.loc[6]['Energy_intensity (GJ/t)']*fuel_prices.loc['Eletricidade']['BRL/TJ']
+                           +innovation_measures.loc[7]['Energy_intensity (GJ/t)']*fuel_prices.loc['Carvao metalurgico']['BRL/TJ']
+                 +innovation_measures.loc[8]['Energy_intensity (GJ/t)']*fuel_prices.loc['Gas natural']['BRL/TJ']
+                 +innovation_measures.loc[9]['Energy_intensity (GJ/t)']*fuel_prices.loc['Oleo combustivel']['BRL/TJ']
+                 )
+    
+    #Energy consumption by route without energy efficiency measures:
+    EC_R1_no_measure = (float(R1_EI_Total[year]))*production_R1
+    EC_R2_no_measure=  (float(R2_EI_Total[year]))*production_R2
+    EC_R3_no_measure=+(float(R3_EI_Total[year]))*production_R3
+    EC_R4_no_measure= +(float(R4_EI_Total[year]))*production_R4
+    
+    Emission_Baseline = (
+            (EC_R1_no_measure*sum(Energy_share_R1.loc[f][year]*emission_factor.loc[f]['CO2e'] for f in Energy_share_R1.index)/10**6
+            +EC_R2_no_measure * sum(Energy_share_R2.loc[f][year]*emission_factor.loc[f]['CO2e'] for f in Energy_share_R2.index)/10**6
+            +EC_R3_no_measure *sum(Energy_share_R3.loc[f][year]*emission_factor.loc[f]['CO2e'] for f in Energy_share_R3.index)/10**6
+            +EC_R4_no_measure*sum(Energy_share_R4.loc[f][year]*emission_factor.loc[f]['CO2e'] for f in Energy_share_R4.index)/10**6)
+            
+            )
+    
+##    Fuel cost when applying mitigation measures: REFAZER
+    #Acho que posso estar esquecendo de colocar o acréscimo do custo de combustíveis ao usar carvão vegetal
+    #Energy saving = Penetration of a given technology * Reduction in GJ/t  * (energy share * fuel price) * production
+    Energy_saving_R1 = sum(model.X1[i]*mitigation_measures_dict['R1'][i]['Energy reduction (Gj/t)']*sum(EI_dict['R1'][mitigation_measures_dict['R1'][i]['Step']]['2023'][x]/sum(EI_dict['R1'][mitigation_measures_dict['R1'][i]['Step']]['2023'].values())*fuel_prices.loc[x]['BRL/TJ'] for x in EI_dict['R1'][mitigation_measures_dict['R1'][i]['Step']]['2023']) for i in k1)*production_R1/10**6
+    Energy_saving_R2 = sum(model.X2[i]*mitigation_measures_dict['R2'][i]['Energy reduction (Gj/t)']*sum(EI_dict['R2'][mitigation_measures_dict['R2'][i]['Step']]['2023'][x]/sum(EI_dict['R2'][mitigation_measures_dict['R2'][i]['Step']]['2023'].values())*fuel_prices.loc[x]['BRL/TJ'] for x in EI_dict['R2'][mitigation_measures_dict['R2'][i]['Step']]['2023']) for i in k2)*production_R2/10**6
+    Energy_saving_R3 = sum(model.X3[i]*mitigation_measures_dict['R3'][i]['Energy reduction (Gj/t)']*sum(EI_dict['R3'][mitigation_measures_dict['R3'][i]['Step']]['2023'][x]/sum(EI_dict['R3'][mitigation_measures_dict['R3'][i]['Step']]['2023'].values())*fuel_prices.loc[x]['BRL/TJ'] for x in EI_dict['R3'][mitigation_measures_dict['R3'][i]['Step']]['2023']) for i in k3)*production_R3/10**6
+    Energy_saving_R4 = sum(model.X4[i]*mitigation_measures_dict['R4'][i]['Energy reduction (Gj/t)']*sum(EI_dict['R4'][mitigation_measures_dict['R4'][i]['Step']]['2023'][x]/sum(EI_dict['R4'][mitigation_measures_dict['R4'][i]['Step']]['2023'].values())*fuel_prices.loc[x]['BRL/TJ'] for x in EI_dict['R4'][mitigation_measures_dict['R4'][i]['Step']]['2023']) for i in k4)*production_R4/10**6
+
+    Energy_cost_innovation = (
+            +(model.X5*steel_production.loc[year]['Total']*innovation_measures.loc[0]['Energy_intensity (GJ/t)'] + model.X7*steel_production.loc[year]['Total']*innovation_measures.loc[2]['Energy_intensity (GJ/t)']+model.CCS*steel_production.loc[year]['Total']*innovation_measures.loc[8]['Energy_intensity (GJ/t)'])*fuel_prices.loc['Gas natural']['BRL/TJ']/10**6
+    +(model.X8*steel_production.loc[year]['Total']*innovation_measures.loc[4]['Energy_intensity (GJ/t)'])*fuel_prices.loc['Carvao vegetal']['BRL/TJ']/10**6
+    +(model.X5*steel_production.loc[year]['Total']*innovation_measures.loc[1]['Energy_intensity (GJ/t)'] + model.X7*steel_production.loc[year]['Total']*innovation_measures.loc[3]['Energy_intensity (GJ/t)']+model.X8*steel_production.loc[year]['Total']*innovation_measures.loc[5]['Energy_intensity (GJ/t)']+model.CCS*steel_production.loc[year]['Total']*innovation_measures.loc[6]['Energy_intensity (GJ/t)'])*fuel_prices.loc['Eletricidade']['BRL/TJ']/10**6
+    +model.CCS*innovation_measures.loc[7]['Energy_intensity (GJ/t)']*fuel_prices.loc['Carvao metalurgico']['BRL/TJ']*steel_production.loc[year]['Total']
+    +model.CCS*innovation_measures.loc[9]['Energy_intensity (GJ/t)']*fuel_prices.loc['Oleo combustivel']['BRL/TJ']*steel_production.loc[year]['Total']
+    )
+  
+#    Fuel economy: Fuel cost A - Fuel cost saving
+    fuel_saving = (Energy_saving_R1+ Energy_saving_R2 + Energy_saving_R3+ Energy_saving_R4)
+        
+    fuel_cost = sum(EC_R1_no_measure*Energy_share_R1[year][fuel]*fuel_prices.loc[fuel]['BRL/TJ']
+    +EC_R2_no_measure*Energy_share_R2[year][fuel]*fuel_prices.loc[fuel]['BRL/TJ']
+    +EC_R3_no_measure*Energy_share_R3[year][fuel]*fuel_prices.loc[fuel]['BRL/TJ']
+    +EC_R4_no_measure*Energy_share_R4[year][fuel]*fuel_prices.loc[fuel]['BRL/TJ'] for fuel in Energy_share_R1.index)/10**6
+    
+    levelized = interest_rate*((1+interest_rate)**20)/((1+interest_rate)**20-1)
+    
+    capex_total = (capex_R1 + capex_R2+capex_R3 + capex_R4 + capex_R5+ capex_R6+capex_R7+capex_CCS)*levelized
+#    capex_total = (capex_R1+ capex_R2+capex_R3 + capex_R4 + capex_R5+ capex_R6+capex_R7+capex_CCS)*interest_rate*((1+interest_rate)**20)/((1+interest_rate)**20-1)
+    opex_total =     opex_R1+opex_R2+opex_R3+opex_R4+opex_R5+opex_R6+opex_R7+opex_CCS
+
+    model.obj= Objective(expr =(capex_total
+                         +opex_total
+                         +(fuel_cost+Energy_cost_innovation-fuel_saving)/dolar)
+    )
+    
+    #Restrictions
+    model.con = ConstraintList()
+    
+    ##Penetration
+    for i in k1:
+        model.con.add(model.X1[i] <= float(mitigation_measures_dict['R1'][i]['Penetration']))
+    for i in k2:
+        model.con.add (model.X2[i]<=float(mitigation_measures_dict['R2'][i]['Penetration']))
+    for i in k3:
+        model.con.add (model.X3[i]<=float(mitigation_measures_dict['R3'][i]['Penetration']))
+    for i in k4:
+        model.con.add (model.X4[i]<=float(mitigation_measures_dict['R4'][i]['Penetration']))
+        
+           
+    model.con.add(model.X5<=innovation_measures.loc[0]['Penetration']) #NG
+    # model.con.add(model.X5<=0.25) #NG in REF scenario
+    model.con.add(model.X6+steel_production['Share_BOF_CC'][year]<=0.16) #charcoal limite
+    model.con.add(model.X7<=penetration_inovative[str(year)]['DR-H2']) #H2
+    model.con.add(model.X8<=penetration_inovative[str(year)]['SR']) #SR
+    model.con.add(model.X8<=0.0) #SR
+#    model.con.add(model.X9+steel_production['Share_EAF'][year]<=0.3) #EAF
+#    model.con.add(model.X6+steel_production['Share_BOF_CC'][year]+model.X8<=0.50)
+    model.con.add(model.X5+model.X6+model.X7+model.X8 +model.X9+model.CCS <= float(steel_production.loc[year]['Share_BOF_MC']))
+    model.con.add(model.CCS<=penetration_inovative[str(year)]['BF-BOF-CCS'])
+    
+
+    if year ==2023:
+        pass
+    else:
+        model.con.add((model.X5+model.X7)*steel_production['Total'][year]>=Results[year-1]['H2']*steel_production['Total'][year-1]+Results[year-1]['GN']*steel_production['Total'][year-1])
+#        model.con.add(model.X8*steel_production['Total'][year]>=Results[year-1]['SR']*steel_production['Total'][year-1])
+
+
+    #Add restriction to charcoal consumption    
+    model.con.add(model.X8*steel_production.loc[year]['Total']*innovation_measures.loc[4]['Energy_intensity (GJ/t)'] 
++((EC_R1_no_measure*Energy_share_R1.loc['Carvao vegetal'][year]
+            +EC_R2_no_measure *Energy_share_R2.loc['Carvao vegetal'][year]
+            +EC_R3_no_measure *Energy_share_R3.loc['Carvao vegetal'][year]
+            +EC_R4_no_measure*Energy_share_R4.loc['Carvao vegetal'][year]     
+            )
+        -(sum(model.X1[i]*mitigation_measures_dict['R1'][i]['Energy reduction (Gj/t)']*EI_dict['R1'][mitigation_measures_dict['R1'][i]['Step']]['2023']['Carvao vegetal']/sum(EI_dict['R1'][mitigation_measures_dict['R1'][i]['Step']]['2023'].values()) for i in k1)*production_R1
+    +sum(model.X2[i]*mitigation_measures_dict['R2'][i]['Energy reduction (Gj/t)']*EI_dict['R2'][mitigation_measures_dict['R2'][i]['Step']]['2023']['Carvao vegetal']/sum(EI_dict['R2'][mitigation_measures_dict['R2'][i]['Step']]['2023'].values()) for i in k2)*production_R2
+     +sum(model.X3[i]*mitigation_measures_dict['R3'][i]['Energy reduction (Gj/t)']*EI_dict['R3'][mitigation_measures_dict['R3'][i]['Step']]['2023']['Carvao vegetal']/sum(EI_dict['R3'][mitigation_measures_dict['R3'][i]['Step']]['2023'].values()) for i in k3)*production_R3
+    +sum(model.X4[i]*mitigation_measures_dict['R4'][i]['Energy reduction (Gj/t)']*EI_dict['R4'][mitigation_measures_dict['R4'][i]['Step']]['2023']['Carvao vegetal']/sum(EI_dict['R4'][mitigation_measures_dict['R4'][i]['Step']]['2023'].values()) for i in k4)*production_R4
+)
+    )
+        <= 576812*0.8)
+        # <= 692750)
+        #Potential is equal to 3 845 418 GJ // 449.280.000
+    
+    #Scrap consumption
+    model.con.add((model.X9+steel_production['Share_EAF'][year])*steel_production.loc[year]['Total']*.85<= scrap_supply[str(year)]['High'])
+    
+    #exemplo de como posso fazer o calculo das emissoes
+    def emission_calc_route (route):
+        emission = 0
+        for step in EI_dict[route].keys():
+            emission = emission+sum(EI_dict[route][step]['2023'][f]*emission_factor.loc[f]['CO2e'] for f in EI_dict[route][step]['2023'].keys())
+        return emission
+    
+    Emission_R1 = emission_calc_route('R1')
+    Emission_R2 = emission_calc_route('R2')
+    Emission_R3 = emission_calc_route('R3')
+    Emission_R4 = emission_calc_route('R4')
+    #Emission_R1 = sum(EI_dict['R1']['Alto-forno']['2023'][f]*emission_factor.loc[f]['CO2e'] for f in EI_dict['R1']['Alto-forno']['2023'].keys())
+
+    #Tem que colocar o 5 e o 6 como redução das emissões.
+    model.con.add(
+            Emission_Baseline
+            -(Emission_mitigated_R1
+            +Emission_mitigated_R2
+            +Emission_mitigated_R3
+            +Emission_mitigated_R4)
+            +EC_R5_calc*emission_factor.loc['Gas natural']['CO2e']/10**6
+            +EC_R6_calc*emission_factor.loc['Gas natural']['CO2e']/10**6
+            +EC_R7_calc*emission_factor.loc['Carvao vegetal']['CO2e']/10**6
+            +model.CCS*EF_CCS*steel_production['Total'][year]/10**6
+            -steel_production['Total'][year]*carbon_content*44/12/10**3
+            ==emission
+            )
+    
+    
+    # Solving the problem:
+    solver = SolverFactory('ipopt')
+    result_solver = solver.solve(model, tee = True)
+    
+    CE =(
+            EC_R1_no_measure()*Energy_share_R1[year]
+            +EC_R2_no_measure()*Energy_share_R2[year]
+            +EC_R3_no_measure()*Energy_share_R3[year]
+            +EC_R4_no_measure*Energy_share_R4[year]
+            )
+
+    for fuel in CE.index:
+        CE[fuel] = (CE[fuel]
+        -sum(model.X1[i]()*mitigation_measures_dict['R1'][i]['Energy reduction (Gj/t)']*EI_dict['R1'][mitigation_measures_dict['R1'][i]['Step']]['2023'][fuel]/sum(EI_dict['R1'][mitigation_measures_dict['R1'][i]['Step']]['2023'].values()) for i in k1)*production_R1()
+        -sum(model.X2[i]()*mitigation_measures_dict['R2'][i]['Energy reduction (Gj/t)']*EI_dict['R2'][mitigation_measures_dict['R2'][i]['Step']]['2023'][fuel]/sum(EI_dict['R2'][mitigation_measures_dict['R2'][i]['Step']]['2023'].values())for i in k2)*production_R2()
+        -sum(model.X3[i]()*mitigation_measures_dict['R3'][i]['Energy reduction (Gj/t)']*EI_dict['R3'][mitigation_measures_dict['R3'][i]['Step']]['2023'][fuel]/sum(EI_dict['R3'][mitigation_measures_dict['R3'][i]['Step']]['2023'].values()) for i in k3)*production_R3()
+        -sum(model.X4[i]()*mitigation_measures_dict['R4'][i]['Energy reduction (Gj/t)']*EI_dict['R4'][mitigation_measures_dict['R4'][i]['Step']]['2023'][fuel]/sum(EI_dict['R4'][mitigation_measures_dict['R4'][i]['Step']]['2023'].values()) for i in k4)*production_R4
+        )
+#    
+    #Summing the energy consumption from innovative measures (SR, H-DR, GN-DR, BF-BOF CCS:
+    CE['Gas natural'] = (CE['Gas natural']
+    +model.X5()*steel_production.loc[year]['Total']*innovation_measures.loc[0]['Energy_intensity (GJ/t)'] 
+      + model.X7()*steel_production.loc[year]['Total']*innovation_measures.loc[2]['Energy_intensity (GJ/t)']
+      + model.CCS()*steel_production.loc[year]['Total']*innovation_measures.loc[7]['Energy_intensity (GJ/t)']
+      )
+    
+    CE['Eletricidade'] = (
+            CE['Eletricidade']
+            +model.X5()*steel_production.loc[year]['Total']*innovation_measures.loc[1]['Energy_intensity (GJ/t)'] 
+            + model.X7()*steel_production.loc[year]['Total']*innovation_measures.loc[3]['Energy_intensity (GJ/t)']
+            +model.X8()*steel_production.loc[year]['Total']*innovation_measures.loc[5]['Energy_intensity (GJ/t)']
+            +model.CCS()*steel_production.loc[year]['Total']*innovation_measures.loc[6]['Energy_intensity (GJ/t)']
+            )
+    
+    CE['Carvao vegetal'] = (
+            CE['Carvao vegetal']
+            +model.X8()*steel_production.loc[year]['Total']*innovation_measures.loc[4]['Energy_intensity (GJ/t)'])
+    
+    CE['Carvao metalurgico'] =(CE['Carvao metalurgico']
+            +model.CCS()*steel_production.loc[year]['Total']*innovation_measures.loc[7]['Energy_intensity (GJ/t)']
+    )
+    
+    CE['Oleo combustivel'] =(CE['Oleo combustivel'] 
+    +model.CCS()*steel_production.loc[year]['Total']*innovation_measures.loc[9]['Energy_intensity (GJ/t)']
+    )
+    
+    #Gerando resultado agregado do capex eficiência
+    capex_eficiencia = (sum((mitigation_measures_dict['R1'][i]['CAPEX ($/t)'])*model.X1[i]()*production_R1/1000 for i in k1)
+                        +sum((mitigation_measures_dict['R2'][i]['CAPEX ($/t)'])*model.X2[i]()*production_R2/1000 for i in k2)
+                        +sum((mitigation_measures_dict['R3'][i]['CAPEX ($/t)'])*model.X3[i]()*production_R3/1000 for i in k3)
+                        +sum((mitigation_measures_dict['R4'][i]['CAPEX ($/t)'])*model.X4[i]()*production_R4/1000 for i in k4)
+                        )()*levelized
+    
+    opex_eficiencia = (sum((mitigation_measures_dict['R1'][i]['OPEX ($/t)'])*model.X1[i]()*production_R1/1000 for i in k1)
+                         +sum((mitigation_measures_dict['R2'][i]['OPEX ($/t)'])*model.X2[i]()*production_R2/1000 for i in k2)
+                         +sum((mitigation_measures_dict['R3'][i]['OPEX ($/t)'])*model.X3[i]()*production_R3/1000 for i in k3)
+                         +sum((mitigation_measures_dict['R4'][i]['OPEX ($/t)'])*model.X4[i]()*production_R4/1000 for i in k4)
+                         )()
+    
+    -fuel_saving() #Fuel saving da eficiencia
+
+#mitigação das medidas de eficiência energética    
+    mitigacao_eficiencia = (Emission_mitigated_R1
+    +Emission_mitigated_R2
+    +Emission_mitigated_R3
+    +Emission_mitigated_R4)()
+
+#Mitigação das rotas
+        
+    EI_R1 = ((EC_R1_no_measure*sum(Energy_share_R1.loc[f][year]*emission_factor.loc[f]['CO2e'] for f in Energy_share_R1.index)/10**6)() - Emission_mitigated_R1())/production_R1()*1000
+    EI_R2 = ((EC_R2_no_measure*sum(Energy_share_R2.loc[f][year]*emission_factor.loc[f]['CO2e'] for f in Energy_share_R2.index)/10**6)() - Emission_mitigated_R2())/production_R2()*1000
+    EI_R3 = ((EC_R3_no_measure*sum(Energy_share_R3.loc[f][year]*emission_factor.loc[f]['CO2e'] for f in Energy_share_R3.index)/10**6)() - Emission_mitigated_R3())/production_R3()*1000
+    EI_R5 = EC_R5_calc()*emission_factor.loc['Gas natural']['CO2e']/10**6/production_R5() * 1000
+    EI_R6 = 0 #é zero mesmo
+    EI_R7 = EC_R7_calc()*emission_factor.loc['Carvao vegetal']['CO2e']/10**6/production_R7() * 1000
+
+    R2_mitigacao = (EI_R1-EI_R2)*model.X6()*steel_production.loc[year]['Total']
+    R3_mitigacao = (EI_R1-EI_R3)*model.X9()*steel_production.loc[year]['Total']
+    R5_mitigacao = (EI_R1-EI_R5)*production_R5()
+    R6_mitigacao = (EI_R1-EI_R6)*production_R6()
+    R7_mitigacao = (EI_R1-EI_R7)*production_R7()
+    
+    mitigacao_total = mitigacao_eficiencia*1000 + R2_mitigacao + R3_mitigacao + R5_mitigacao + R6_mitigacao + R7_mitigacao
+    
+#Diferença do CAPEX    
+    R2_capex_mitigacao = -(.170 -.170)*model.X6()*steel_production.loc[year]['Total']*levelized
+    R3_capex_mitigacao = -(.170 -.184)*model.X9()*steel_production.loc[year]['Total']*levelized
+    # (capex_R1()/production_R1() -capex_R4()/production_R4)*production_R4
+    R5_capex_mitigacao = -(.170 -capex_R5()/production_R5())*production_R5()*levelized
+    R6_capex_mitigacao = -(.170 -capex_R6()/production_R6())*production_R6()*levelized
+    R7_capex_mitigacao = -(.170 -capex_R7()/production_R7())*production_R7()*levelized
+       
+
+#diferença do OPEX
+    R2_opex_mitigacao = -(opex_R1()/production_R1() -opex_R2()/production_R2())*model.X6()*steel_production.loc[year]['Total']
+    R3_opex_mitigacao = -(opex_R1()/production_R1() -opex_R3()/production_R3())*model.X9()*steel_production.loc[year]['Total']
+    # (opex_R1()/production_R1() -opex_R4()/production_R4)*production_R4
+    R5_opex_mitigacao = -(opex_R1()/production_R1() -opex_R5()/production_R5())*production_R5()
+    R6_opex_mitigacao = -(opex_R1()/production_R1() -opex_R6()/production_R6())*production_R6()
+    R7_opex_mitigacao = -(opex_R1()/production_R1() -opex_R7()/production_R7())*production_R7()
+
+#Custos unitários de combustível
+    custo_comb_R1 = (sum(EC_R1_no_measure*Energy_share_R1[year][fuel]*fuel_prices.loc[fuel]['BRL/TJ'] for fuel in Energy_share_R1.index)/10**6)()/dolar/production_R1()
+    # custo_comb_R1 = ((sum(EC_R1_no_measure*Energy_share_R1[year][fuel]*fuel_prices.loc[fuel]['BRL/TJ'] for fuel in Energy_share_R1.index)/10**6)() - Energy_saving_R1())/dolar/production_R1()
+    custo_comb_R2 = (sum(EC_R2_no_measure*Energy_share_R2[year][fuel]*fuel_prices.loc[fuel]['BRL/TJ'] for fuel in Energy_share_R1.index)/10**6)()/dolar/production_R2()
+    custo_comb_R3 = (sum(EC_R3_no_measure*Energy_share_R3[year][fuel]*fuel_prices.loc[fuel]['BRL/TJ'] for fuel in Energy_share_R1.index)/10**6)()/dolar/production_R3()
+    custo_comb_R5 = (model.X5()*steel_production.loc[year]['Total']*innovation_measures.loc[0]['Energy_intensity (GJ/t)']*fuel_prices.loc['Gas natural']['BRL/TJ']
+                         +model.X5()*steel_production.loc[year]['Total']*innovation_measures.loc[1]['Energy_intensity (GJ/t)']*fuel_prices.loc['Eletricidade']['BRL/TJ'])/10**6/dolar/production_R5()
+    custo_comb_R6 = (model.X7()*steel_production.loc[year]['Total']*innovation_measures.loc[2]['Energy_intensity (GJ/t)']*fuel_prices.loc['Gas natural']['BRL/TJ']
+                         +model.X7()*steel_production.loc[year]['Total']*innovation_measures.loc[3]['Energy_intensity (GJ/t)']*fuel_prices.loc['Eletricidade']['BRL/TJ'])/10**6/dolar/production_R6()
+    custo_comb_R7 = (model.X8()*steel_production.loc[year]['Total']*innovation_measures.loc[4]['Energy_intensity (GJ/t)']*fuel_prices.loc['Carvao vegetal']['BRL/TJ']
+                         +model.X8()*steel_production.loc[year]['Total']*innovation_measures.loc[5]['Energy_intensity (GJ/t)']*fuel_prices.loc['Eletricidade']['BRL/TJ'])/10**6/dolar/production_R7()
+    
+    R2_economia_comb = (custo_comb_R2-custo_comb_R1)*model.X6()*steel_production.loc[year]['Total']
+    R3_economia_comb = (custo_comb_R3-custo_comb_R1)*model.X9()*steel_production.loc[year]['Total']
+    R5_economia_comb = (custo_comb_R5-custo_comb_R1)*production_R5()
+    R6_economia_comb = (custo_comb_R6-custo_comb_R1)*production_R6()
+    R7_economia_comb = (custo_comb_R7-custo_comb_R1)*production_R7()
+
+    
+    mitigacao = {
+        'Capex':{
+            'Carvao vegetal':R2_capex_mitigacao,
+            'EAF': R3_capex_mitigacao,
+            'DR-GN': R5_capex_mitigacao,
+            'DR-H2': R6_capex_mitigacao,
+            'SR-CV' : R7_capex_mitigacao,
+            'Eficiencia':capex_eficiencia
+            },
+        'Opex':{
+            'Carvao vegetal':R2_opex_mitigacao,
+            'EAF': R3_opex_mitigacao,
+            'DR-GN': R5_opex_mitigacao,
+            'DR-H2': R6_opex_mitigacao,
+            'SR-CV' : R7_opex_mitigacao,
+            'Eficiencia': opex_eficiencia
+            },
+        'Gasto comb':{
+            'Carvao vegetal':R2_economia_comb,
+            'EAF': R3_economia_comb,
+            'DR-GN': R5_economia_comb,
+            'DR-H2': R6_economia_comb,
+            'SR-CV' : R7_economia_comb,
+            'Eficiencia' : -fuel_saving()/1000
+            },
+        'Mitigacao':{
+            'Carvao vegetal':R2_mitigacao,
+            'EAF': R3_mitigacao,
+            'DR-GN': R5_mitigacao,
+            'DR-H2': R6_mitigacao,
+            'SR-CV' : R7_mitigacao,
+            'Eficiencia' : mitigacao_eficiencia*1000
+            }
+        }
+        
+        
+        
+    return model,capex_total,CE ,mitigacao , opex_total
+
+
+
+#%%#%%
+
+"""Importing Mitigation measures:
+
+mitigation_measures = pd.read_csv("https://raw.githubusercontent.com/ottohebeda/Iron-and-steel-model/main/Iron_and_steel_mitigation_measures_V2.csv")
+mitigation_measures['Total Reduction GJ/t'] = mitigation_measures['Energy reduction (Gj/t)']*mitigation_measures.Penetration
+
+#lifetime of mitigation measures:
+life_time = 20 #years
+mitigation_measures_dict = {}
+for route in pd.unique(mitigation_measures.Route):
+    mitigation_dict = {}
+    mitigation = {}
+    for etapa in pd.unique(mitigation_measures.loc[mitigation_measures['Route']==route,'Step']):
+#        mitigation=mitigation_measures.loc[mitigation_measures['Route']==route].loc[mitigation_measures['Step']==etapa].set_index('Mitigation measure').drop(['Route','Step'],axis = 1).transpose().to_dict()
+#        mitigation_dict[etapa] = mitigation
+        mitigation=mitigation_measures.loc[mitigation_measures['Route']==route].set_index('Mitigation measure').drop(['Route'],axis = 1).transpose().to_dict()
+    mitigation_measures_dict[route] = mitigation
+    
+# teste = mitigation_measures.loc[mitigation_measures['Route']==route].set_index('Mitigation measure').drop(['Route'],axis = 1).transpose().to_dict()
+
+#Percentual of intensity reduction within each route and step
+mitigation_measures['Percentual of reduction'] = 0
+for indice in mitigation_measures.index:
+    intensidade_Route_etapa= float(pd.DataFrame((mitigation_measures.loc[mitigation_measures['Route'] == mitigation_measures.loc[indice]['Route']].groupby('Step').sum()['Total Reduction GJ/t'])).loc[mitigation_measures.loc[indice]['Step']])
+    if intensidade_Route_etapa == 0:
+        pass
+    else:
+        mitigation_measures.loc[indice,'Percentual of reduction'] = mitigation_measures.loc[indice]['Total Reduction GJ/t']/intensidade_Route_etapa
+        
+innovation_measures = pd.read_csv('https://raw.githubusercontent.com/ottohebeda/Iron-and-steel-model/main/Innovation_measures.csv')
+
+penetration_inovative = pd.read_csv('https://raw.githubusercontent.com/ottohebeda/Iron-and-steel-model/main/Penetration_innovative.csv')
+penetration_inovative = penetration_inovative.set_index('Technology')
+
+"""Importing Fuel prices"""
+fuel_prices = pd.read_csv("https://raw.githubusercontent.com/ottohebeda/Iron-and-steel-model/main/Fuel_price_3.csv")
+#fuel_prices['BRL/TJ'] = fuel_prices['BRL/ktep']/ktoe_to_tj 
+fuel_prices = fuel_prices.set_index('﻿Combustivel')
+#fuel_prices.loc['Gas natural'] =fuel_prices.loc['Gas natural']/20
+
+"""interest rate"""
+interest_rate = 0.08
+
+"""
+
+
+#%%#%%#%%
+"""Emission Base Reference
+
+
+#Emission base reference is the amount of emissions when no measure is considered.
+year = 2023
+carbon_content = 0.01
+def emission_calc (year):
+    """This function estimates the emission in a given year. It uses the production in each route, the fuel share and the emission factor. After it removes the amount of carbon in the steel considering 1%"""
+    emission = ((
+        float(R1_EI_Total[year])*(float(steel_production.loc[year]['Share_BOF_MC']))*steel_production.loc[year]['Total']*sum(Energy_share_R1.loc[f][year]*emission_factor.loc[f]['CO2e'] for f in Energy_share_R1.index)
+        +(float(R2_EI_Total[year]))*steel_production.loc[year]['Total']*(steel_production.loc[year]['Share_BOF_CC'])*sum(Energy_share_R2.loc[f][year]*emission_factor.loc[f]['CO2e'] for f in Energy_share_R2.index)
+        +(float(R3_EI_Total[year]))*steel_production.loc[year]['EAF']*sum(Energy_share_R3.loc[f][year]*emission_factor.loc[f]['CO2e'] for f in Energy_share_R3.index)
+        +(float(R4_EI_Total[year]))*pig_iron_production.loc[year]['Independente CV']*sum(Energy_share_R4.loc[f][year]*emission_factor.loc[f]['CO2e'] for f in Energy_share_R4.index)
+        )/10**6
+    -steel_production['Total'][year]*carbon_content*44/12/10**3)
+    return emission
+
+Emission_Reference = emission_calc (2023)    
+
+"""
+
+#%%#%%#%%
