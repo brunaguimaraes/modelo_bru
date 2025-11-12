@@ -1,3 +1,7 @@
-﻿Route;Energy_intensity;Emission_intensity;CAPEX
-EAF;10;0.3;230
-BF-BOF_CHARCOAL;19;0.7;170
+﻿Route;Energy_intensity;Emission_intensity;CAPEX;OPEX
+EAF;10;0.3;230;
+BF-BOF_CHARCOAL;19;0.7;170;
+DR-NG;16;;500;58
+DR-H2;13.1;;574;58
+SR;22;;640;80
+BF-BOF-CCS; 15.8;;717;88

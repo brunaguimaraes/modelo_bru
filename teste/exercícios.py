@@ -10,9 +10,10 @@ Created on Fri Jul 25 16:52:07 2025
 
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-from pyomo.environ import *
-
+from pyomo.environ import (
+    ConcreteModel, Set, Var, Param, Constraint, Objective, NonNegativeReals,
+    Expression, minimize
+)
 #%%
 """2. importar dados"""
 
@@ -118,7 +119,7 @@ steel_production = steel_production.interpolate()
 current_year = 2023
 # Horizon decenal:
 future_years = list(range(current_year+1, 2051))  # 2023 a 2050 - future_years é simplesmente uma lista Python dos anos seguintes em que seu modelo vai instalar plantas, produzir e mitigar emissões.
-routes = ['BF-BOF', 'EAF', 'R3', 'R4']
+routes = ['BF-BOF', 'EAF', 'DR-NG', 'DR-H2', 'SR', 'BF-BOF-CCS']
 
 # Calcular capacidade disponível de cada rota em cada ano, considerando vida útil restante
 capacity_exist = {p: {t: 0.0 for t in future_years} for p in routes}
@@ -130,7 +131,7 @@ for _, row in plants.iterrows():
         if t <= retire_year:
             capacity_exist[p][t] += cap
 
-# Calcular a capacidade disponível total, equivalent à produção total:
+# Calcular a capacidade disponível total, equivalent à produção total somando todas as tecnologias:
 capacity_total = {t: sum(capacity_exist[p][t] for p in routes) for t in future_years}    
     
 # Iniciar acumulador de nova capacidade (decisão de investimento)
@@ -138,10 +139,11 @@ capacity_total = {t: sum(capacity_exist[p][t] for p in routes) for t in future_y
 
 #%%
 
-"""Carregando os dados de inovação/medidas e penetração"""
+"""Carregando os dados de limites de penetração"""
 
+"""essa primeira etapa de carregar as medidas, eu já imputei lá nas etapas iniciais, na tabela de "tecnologias"""
 # 1. Carregar medidas de inovação (parâmetros associados a cada tecnologia inovadora)
-innovation_measures = pd.read_csv('Innovation_measures_2.csv')  
+#innovation_measures = pd.read_csv('Innovation_measures_2.csv')
 # Esperando colunas típicas: ['Technology', 'Route', 'Emission_factor', 'Cost', 'Start_year', ...]
 # Pode conter tecnologias que são melhorias/retrofit em rotas existentes OU rotas novas de fato
 
@@ -149,28 +151,87 @@ innovation_measures = pd.read_csv('Innovation_measures_2.csv')
 penetration_inovative = pd.read_csv('Penetration_innovative.csv')  # Ex: colunas 'Technology', '2023', '2024',...
 penetration_inovative = penetration_inovative.set_index('Technology')
 
-
-"""Ligando aos conjuntos do modelo Pyomo"""
-
-from pyomo.environ import *
-
+#Ligando aos conjuntos do modelo Pyomo
+# -------------------
+# 1. Conjuntos:
 # Supondo...
+
 techs = list(penetration_inovative.index)
 years = [int(y) for y in penetration_inovative.columns]
 m = ConcreteModel()
 m.Tech = Set(initialize=techs)
 m.Year = Set(initialize=years, ordered=True)
 
+
+# 2. Variáveis de decisão:
+m.capacity_expansion = Var(m.Tech, m.Year, domain=NonNegativeReals)    # [capacidade instalada nova]
+# Capacidade adicional (expansão) instalada em cada tecnologia por ano
+m.production = Var(m.Tech, m.Year, domain=NonNegativeReals)            # [produção realizada]
+
+# 3. Parâmetros:
+# penetration_dict
+# production_dict / m.ProductionTarget
+# measures_dict
+# capacity_exist
+# m.EmissionLimit
+
+
+
+# 4. Capacidade acumulada:
+def total_capacity(m, tech, year):
+    return capacity_exist.get(tech, {}).get(year, 0) + \
+        sum(m.capacity_expansion[tech, y] for y in m.Year if y <= year)
+m.TotalCapacity = Expression(m.Tech, m.Year, rule=total_capacity)
+
+
+# 5. Restrições:
 penetration_dict = penetration_inovative.stack().to_dict()
 # Isso cria um dicionário {(tech, ano): valor_max, ...}
 
+production_dict = steel_production['Total'].to_dict()
+m.ProductionTarget = Param(m.Year, initialize=production_dict)
+  
+# Restrição: expansão limitada pela penetração máxima da tecnologia     """Expansão só pode atender até a fração definida da demanda anual"""
 def penetration_rule(m, tech, year):
-    # produção inovativa total ≤ penetração (% limitado) × demanda total
-    # EXEMPLO: m.prod_sum[tech, year] ≤ penetration_max[tech, year]*m.Demand[year]
-    return m.prod_innovative[tech, year] <= penetration_dict.get((tech, year), 0) * m.Demand[year]
-m.Penetração = Constraint(m.Tech, m.Year, rule=penetration_rule)
+    return m.capacity_expansion[tech, year] <= penetration_dict.get((tech, year), 0) * m.ProductionTarget[year]
+m.PenetrationLimit = Constraint(m.Tech, m.Year, rule=penetration_rule)
 
-"""Você pode criar variáveis diferentes em Pyomo:
+def capacity_constraint(m, tech, year):
+    return m.production[tech, year] <= m.TotalCapacity[tech, year]
+m.CapacityLimit = Constraint(m.Tech, m.Year, rule=capacity_constraint)
+
+def demand_constraint(m, year):
+    return sum(m.production[tech, year] for tech in m.Tech) >= m.ProductionTarget[year]
+m.Demand = Constraint(m.Year, rule=demand_constraint)
+
+
+"""conferir isso"""
+
+measures_dict = tecnologias.T.to_dict()
+
+def emission_rule(m, year):
+    return sum(measures_dict[tech]['Emission_factor'] * m.production[tech, year] for tech in m.Tech) <= m.EmissionLimit[year]
+m.TotalEmissions = Constraint(m.Year, rule=emission_rule)
+
+# 6. Função objetivo:
+def obj_rule(m):
+    return \
+        sum(measures_dict[tech]['CAPEX'] * m.capacity_expansion[tech, year]
+            for tech in m.Tech for year in m.Year) + \
+        sum(measures_dict[tech]['OPEX'] * m.production[tech, year]
+            for tech in m.Tech for year in m.Year)
+m.Objective = Objective(rule=obj_rule, sense=minimize)
+
+
+
+
+
+
+
+
+
+
+"""OBS DE UM OUTRO MOMENTO: Você pode criar variáveis diferentes em Pyomo:
     
 m.new_innov_plants[tech, year] (instalar nova planta inovadora)
 m.retrofit[tech, year] (planta existente convertendo para inovadora)
@@ -178,20 +239,7 @@ m.prod_innovative[tech, year] (produção pela rota inovadora)
 
 Você pode ligar isso aos parâmetros do innovation_measures assim:"""
 
-measures_dict = innovation_measures.set_index('Technology').T.to_dict()
-# Assim, measures_dict[tech]['Emission_factor'], measures_dict[tech]['Cost'], etc.
-
-def obj_rule(m):
-    return sum(measures_dict[tech]['Cost'] * m.prod_innovative[tech, y]
-            for tech in m.Tech for y in m.Year) \
-            # + outros custos
-            
-def emission_rule(m, y):
-    return sum(measures_dict[tech]['Emission_factor'] * m.prod_innovative[tech, y]
-            for tech in m.Tech) \
-            # + emissões das rotas convencionais 
-            <= m.EmissionLimit[y]
-            
+          
             
 
 #%%
