@@ -1,0 +1,1 @@
+-L/d/a/Cbc/Cbc/dist/lib -lCgl -lOsiClp -lClpSolver -lClp -lOsi -lCoinUtils -lz -lm
