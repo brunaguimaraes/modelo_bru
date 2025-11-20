@@ -34,7 +34,7 @@ tecnologias.set_index('Route', inplace=True)
 ### inserindo mais dados históricos de produção conforme modelagem do Otto
 
 """Importing Crude Steel production by route in kt"""
-steel_production = pd.read_csv('C:/Users/Bruna/OneDrive/DOUTORADO/0.TESE/modelagem/modelo_bru/steel_production_v2.csv') #in kt
+steel_production = pd.read_csv('C:/Users/Bruna/OneDrive/DOUTORADO/0.TESE/modelagem/modelo_bru/steel_production.csv') #in kt
 steel_production = steel_production.set_index('Year')   
 steel_production['Total']= steel_production.sum(axis=1)
 
@@ -93,23 +93,38 @@ EI_BEU = EI_BEU.replace({'Combustivel':'Outras fontes primarias'},'Outras fontes
 #%%
 """3. projetar demanda"""
 
-#criar um dataframe da demanda entre 2024 e 2050: A demanda é equivalente ao nível de produção calculado no PROJETO IMAGINE.
+"""criando um dataframe só do total alvo de produção"""
 
-"""Steel production Projection"""
+steel_total_target = steel_production[['Total']].copy()
+steel_total_target.index.name = 'Year'  # só para garantir
 
-for year in np.linspace(2024,2050,2050-2024+1).astype(int):
-    steel_production.loc[year] =np.full([len(steel_production.columns)],np.nan)
+#Adicione anos até 2050 como NaN, se não existirem
+for year in range(2024, 2051):
+    if year not in steel_total_target.index:
+        steel_total_target.loc[year] = [np.nan]
+steel_total_target.sort_index(inplace=True)
+
+
+#Aplique os fatores apenas nos anos-alvo
 
 Production_increase = {
-        2025:1.037,
-        2030:1.146,
-        2035:1.306,
-        2040:1.486,
-        2045:1.699,
-        2050:1.961,
-        }
+    2025: 1.037,
+    2030: 1.146,
+    2035: 1.306,
+    2040: 1.486,
+    2045: 1.699,
+    2050: 1.961,
+}
 
-steel_production = steel_production.interpolate()
+# Use a produção de 2023 como base
+valor_base = steel_total_target.loc[2023, 'Total']
+
+# Preenche os anos-chave (multiplicados)
+for ano, fator in Production_increase.items():
+    steel_total_target.loc[ano, 'Total'] = valor_base * fator
+
+#Interpole os anos entre os fatores
+steel_total_target['Total'] = steel_total_target['Total'].interpolate()
 
 
 
@@ -164,12 +179,12 @@ penetration_inovative = penetration_inovative.set_index('Technology')
 techs = list(penetration_inovative.index)
 
 years = [int(y) for y in penetration_inovative.columns]
-steel_production.index = steel_production.index.astype(int)  # Garante que os anos são inteiros
+steel_total_target.index = steel_total_target.index.astype(int)  # Garante que os anos são inteiros
 
 m = ConcreteModel()
 m.Year = Set(initialize=years, ordered=True)
 #years = [int(y) for y in penetration_inovative.columns]
-#production_dict = {ano: val for ano, val in steel_production['Total'].to_dict().items() if ano in years}
+#production_dict = {ano: val for ano, val in steel_total_target['Total'].to_dict().items() if ano in years}
 m.Tech = Set(initialize=techs)
 
 
@@ -200,7 +215,7 @@ m.TotalCapacity = Expression(m.Tech, m.Year, rule=total_capacity)
 # 5. Restrições:
 penetration_dict = penetration_inovative.stack().to_dict()
 # Isso cria um dicionário {(tech, ano): valor_max, ...}
-production_dict = {y: v for y, v in steel_production['Total'].to_dict().items() if y in years}
+production_dict = {y: v for y, v in steel_total_target['Total'].to_dict().items() if y in years}
 m.ProductionTarget = Param(m.Year, initialize=production_dict)
   
 # Restrição: expansão limitada pela penetração máxima da tecnologia     """Expansão só pode atender até a fração definida da demanda anual"""
@@ -251,7 +266,82 @@ def obj_rule(m):
             for tech in m.Tech for year in m.Year)
 m.Objective = Objective(rule=obj_rule, sense=minimize)
 
+      #%% BLOCO DE DEBUG!!!!
       
+import numpy as np
+
+print("\n---- CHECANDO ProductionTarget ----")
+for y in m.Year:
+    try:
+        v = float(m.ProductionTarget[y])
+        if np.isnan(v) or np.isinf(v):
+            print(f"ProductionTarget inválido para {y}: {v}")
+    except Exception as e:
+        print(f"(Exception) ProductionTarget[{y}]: {e}")
+
+print("\n---- CHECANDO EmissionLimit ----")
+for y in m.Year:
+    try:
+        v = float(m.EmissionLimit[y])
+        if np.isnan(v) or np.isinf(v):
+            print(f"EmissionLimit inválido para {y}: {v}")
+    except Exception as e:
+        print(f"(Exception) EmissionLimit[{y}]: {e}")
+
+print("\n---- CHECANDO penetration_dict ----")
+for key, v in penetration_dict.items():
+    if np.isnan(v) or np.isinf(v):
+        print(f"penetration_dict inválido para {key}: {v}")
+
+print("\n---- CHECANDO capacidade_existente (capacity_exist, SE USADO) ----")
+if 'capacity_exist' in globals():
+    for tech in m.Tech:
+        for year in m.Year:
+            v = capacity_exist.get(tech, {}).get(year, 0)
+            try:
+                v = float(v)
+                if np.isnan(v) or np.isinf(v):
+                    print(f"capacity_exist inválido para {(tech, year)}: {v}")
+            except Exception as e:
+                print(f"(Exception) capacity_exist[{tech}, {year}]: {e}")
+
+print("\n---- CHECANDO Emission_intensity das tecnologias ----")
+for tech in m.Tech:
+    try:
+        emiss = measures_dict[tech]['Emission_intensity']
+        if isinstance(emiss, str):
+            emiss = float(emiss.replace(',','.'))
+        if np.isnan(emiss) or np.isinf(emiss):
+            print(f"Emission_intensity inválido para {tech}: {emiss}")
+    except Exception as e:
+        print(f"(Exception) Emission_intensity[{tech}]: {e}")
+
+print("\n---- CHECANDO CAPEX das tecnologias ----")
+for tech in m.Tech:
+    try:
+        capex = measures_dict[tech]['CAPEX']
+        if isinstance(capex, str):
+            capex = float(capex.replace(',','.'))
+        if np.isnan(capex) or np.isinf(capex):
+            print(f"CAPEX inválido para {tech}: {capex}")
+    except Exception as e:
+        print(f"(Exception) CAPEX[{tech}]: {e}")
+
+print("\n---- CHECANDO OPEX das tecnologias ----")
+for tech in m.Tech:
+    try:
+        opex = measures_dict[tech]['OPEX']
+        if isinstance(opex, str):
+            opex = float(opex.replace(',','.'))
+        if np.isnan(opex) or np.isinf(opex):
+            print(f"OPEX inválido para {tech}: {opex}")
+    except Exception as e:
+        print(f"(Exception) OPEX[{tech}]: {e}")
+
+print("\n==== FIM DAS CHECAGENS DE INPUT ====\n")
+      
+
+
 
 #%%
 
@@ -348,12 +438,22 @@ print(emissions_df)
 #%%
 
 # exportar os resultados para Excel 
-with pd.ExcelWriter("resultados_modelo.xlsx") as writer:
+
+import os
+
+# Defina o caminho absoluto do arquivo
+output_path = r"C:\Users\Bruna\OneDrive\DOUTORADO\0.TESE\modelagem\modelo_bru\teste\resultados\resultados_modelo.xlsx"
+os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+
+# Salva o Excel no local desejado
+with pd.ExcelWriter(output_path) as writer:
     capacity_df.to_excel(writer, sheet_name="Capacidade")
     production_df.to_excel(writer, sheet_name="Produção")
     total_capacity_df.to_excel(writer, sheet_name="Capacidade_Total")
     emissions_df.to_excel(writer, sheet_name="Emissões")
     
+
     
     
     
