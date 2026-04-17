@@ -39,21 +39,21 @@ steel_production['Total']= steel_production.sum(axis=1)
 """Importing Pig Iron production by Route in kt"""
 pig_iron_production = pd.read_csv('C:/Users/Bruna/OneDrive/DOUTORADO/0.TESE/modelagem/modelo_bru/Pig_iron_production_2.csv')
 pig_iron_production = pig_iron_production.set_index('Ano')
-pig_iron_production['Share BOF CC'] = pig_iron_production['Integrada CV']/(pig_iron_production['Integrada CV']+pig_iron_production['Integrada CM'])
-pig_iron_production['Share BOF MC']=1-pig_iron_production['Share BOF CC']
+pig_iron_production['Share BF-BOF CC'] = pig_iron_production['Integrada CV']/(pig_iron_production['Integrada CV']+pig_iron_production['Integrada CM'])
+pig_iron_production['Share BF-BOF MC']=1-pig_iron_production['Share BF-BOF CC']
 
 """Charcoal and coal in BF-BOF production"""
 #BOF Coal production in Mt
-steel_production['BOF MC'] = steel_production.BOF*pig_iron_production['Share BOF MC']
+steel_production['BF-BOF MC'] = steel_production.BOF*pig_iron_production['Share BF-BOF MC']
 
 #BOF Charcoal production in Mt
-steel_production['BOF CC'] = steel_production.BOF*pig_iron_production['Share BOF CC']
+steel_production['BF-BOF CC'] = steel_production.BOF*pig_iron_production['Share BF-BOF CC']
 
 steel_production['Total']= steel_production['BOF']+steel_production['EAF'] #Removing EOF from the total
 steel_production = steel_production.drop('EOF',axis= 'columns')
 
-steel_production['Share_BOF_MC'] = steel_production['BOF MC']/steel_production['Total']
-steel_production['Share_BOF_CC'] = steel_production['BOF CC']/steel_production['Total']
+steel_production['Share_BOF_MC'] = steel_production['BF-BOF MC']/steel_production['Total']
+steel_production['Share_BOF_CC'] = steel_production['BF-BOF CC']/steel_production['Total']
 steel_production['Share_EAF'] = steel_production['EAF']/steel_production['Total']
 
 """Scrap supply"""
@@ -133,7 +133,7 @@ current_year = 2023
 future_years = list(range(current_year+1, 2051))  # 2023 a 2050 - future_years é simplesmente uma lista Python dos anos seguintes em que seu modelo vai instalar plantas, produzir e mitigar emissões.
 routes = ['BF-BOF', 'EAF', 'DR-NG', 'DR-H2', 'SR', 'BF-BOF-CCS']
 
-# Calcular capacidade disponível de cada rota em cada ano, considerando vida útil restante
+# Calcular capacidade existente de cada rota em cada ano, considerando vida útil restante
 capacity_exist = {p: {t: 0.0 for t in future_years} for p in routes}
 for _, row in plants.iterrows():
     p = row['Route']
@@ -143,12 +143,12 @@ for _, row in plants.iterrows():
         if t <= retire_year:
             capacity_exist[p][t] += cap
 
-# Calcular a capacidade disponível total, equivalent à produção total somando todas as tecnologias:
-capacity_total = {t: sum(capacity_exist[p][t] for p in routes) for t in future_years}    
+# Calcular a capacidade existente total, equivalent à produção total somando todas as tecnologias:
+capacity_exist_total = {t: sum(capacity_exist[p][t] for p in routes) for t in future_years}    
     
 #%% carregando restrições
 
-# 3. Parâmetros:
+# Parâmetros:
 # penetration_dict
 # production_dict / m.ProductionTarget
 # measures_dict
@@ -171,16 +171,38 @@ steel_total_target.index = steel_total_target.index.astype(int)  # Garante que o
 
 m = ConcreteModel()
 m.Year = Set(initialize=years, ordered=True)
-#years = [int(y) for y in penetration_inovative.columns]
-#production_dict = {ano: val for ano, val in steel_total_target['Total'].to_dict().items() if ano in years}
 m.Tech = Set(initialize=techs)
 
 
 
 # 2. Variáveis de decisão:
-m.capacity_expansion = Var(m.Tech, m.Year, domain=NonNegativeReals)    # [capacidade instalada nova]
+m.capacity_expansion = Var(m.Tech, m.Year, domain=NonNegativeReals)    # [capacidade instalada nova = adicional]
 
 m.production = Var(m.Tech, m.Year, domain=NonNegativeReals)            # [produção realizada]
+
+#
+# Restrição: definição do productiontarget
+# Isso cria um dicionário {(tech, ano): valor_max, ...}
+production_dict = {y: v for y, v in steel_total_target['Total'].to_dict().items() if y in years}
+m.ProductionTarget = Param(m.Year, initialize=production_dict)
+
+
+#CUMPRIMENTO DO HISTÓRICO
+historical_routes = ['BF-BOF MC', 'BF-BOF CC', 'EAF']
+
+def historical_production_rule(m, tech, year):
+    if year <= current_year:
+        if tech in historical_routes:
+            # usa o dado oficial histórico
+            return m.production[tech, year] == steel_production.loc[year, tech]
+        else:
+            # tecnologias que NÃO existiam no histórico
+            return m.production[tech, year] == 0
+    return Constraint.Skip
+m.HistoricalProduction = Constraint(
+    m.Tech, m.Year,
+    rule=historical_production_rule
+)
 
 
 # Capacidade acumulada:
@@ -189,10 +211,7 @@ def total_capacity(m, tech, year):
         sum(m.capacity_expansion[tech, y] for y in m.Year if y <= year)
 m.TotalCapacity = Expression(m.Tech, m.Year, rule=total_capacity)
 
-# Restrição: definição do productiontarget
-# Isso cria um dicionário {(tech, ano): valor_max, ...}
-production_dict = {y: v for y, v in steel_total_target['Total'].to_dict().items() if y in years}
-m.ProductionTarget = Param(m.Year, initialize=production_dict)
+
   
 # Restrição: expansão limitada pela penetração máxima da tecnologia     """Expansão só pode atender até a fração definida da produção alvo anual"""
 penetration_dict = {(tech, int(year)): float(val)
@@ -207,9 +226,16 @@ m.PenetrationLimitProduction = Constraint(m.Tech, m.Year, rule=penetration_rule_
 # m.PenetrationLimit = Constraint(m.Tech, m.Year, rule=penetration_rule)
 
 # Restrição: a produção do meu modelo tem que ser igual à produção alvo de cada ano até 2050
+# def production_constraint(m, year):
+#     return sum(m.production[tech, year] for tech in m.Tech) == m.ProductionTarget[year]
+# m.ProductionConstraint = Constraint(m.Year, rule=production_constraint)
+
 def production_constraint(m, year):
-    return sum(m.production[tech, year] for tech in m.Tech) == m.ProductionTarget[year]
+    if year <= current_year:
+        return Constraint.Skip
+    return sum(m.production[tech, year] for tech in m.Tech) >= m.ProductionTarget[year]
 m.ProductionConstraint = Constraint(m.Year, rule=production_constraint)
+
 
 # Restrição: a produção do meu modelo tem que ser igual ou menor à capacidade instalada de cada ano até 2050
 def capacity_constraint(m, tech, year):
@@ -335,46 +361,22 @@ print("\n==== FIM DAS CHECAGENS DE INPUT ====\n")
 
 # Verifique para CADA ANO se a soma das penetrações dá >= 1
 for year in years:
-total_penetration = penetration_inovative[year].sum()
+    total_penetration = penetration_inovative[year].sum()
     print(f"Ano {year}: penetração total = {total_penetration}")
 
 (penetration_inovative.sum(axis=0) < 1).any()
 # True => tem algum ano com penetração insuficiente
 
 
-#%%
-
-"""8 .extrair e visualizar os resultados da otimização"""
+#%% Extrair e visualizar os resultados da otimização
 
 
 from pyomo.opt import SolverFactory
 
-#solver_name = "ipopt"
-#solver = SolverFactory(solver_name + "nl", solve_io="nl")
-#results = solver.solve(m, tee=True)
-
-# solver = SolverFactory('ipopt')
 solver_name = "ipopt"  # "highs", "cbc",  "couenne", "bonmin", "ipopt", "scip", or "gcg".
 solver = SolverFactory(solver_name+"nl", executable=modules.find(solver_name), solve_io="nl")
     
 result_solver = solver.solve(m, tee = True)
-    
-# print(m.display())
-
-
-# # Capacidade adicionada por tecnologia e ano
-# for tech in m.Tech:
-#     for year in m.Year:
-#         val = m.capacity_expansion[tech, year].value
-#         if val > 0:
-#             print(f"{year} - {tech}: {val:.2f} (nova capacidade)")
-            
-# #Produção por tecnologia e ano
-# for tech in m.Tech:
-#     for year in m.Year:
-#         val = m.production[tech, year].value
-#         if val > 0:
-#             print(f"{year} - {tech}: {val:.2f} (produção)")
 
 
 #Colocar resultados em DataFrame 
@@ -385,11 +387,19 @@ incremental_capacity_df = pd.DataFrame([
     for tech in m.Tech for year in m.Year
 ])
 
-# Produção
+# Produção por tecnologia
 production_df = pd.DataFrame([
     {"Technology": tech, "Year": year, "Production": m.production[tech, year].value}
     for tech in m.Tech for year in m.Year
 ])
+
+# Produção total agrupada (independente da tecnologia)
+production_total_df = (
+    production_df
+    .groupby("Year", as_index=False)["Production"]
+    .sum()
+)
+production_total_df.rename(columns={"Production": "Total_Production"}, inplace=True)
 
 # Capacidade total (Expression)
 total_capacity_df = pd.DataFrame([
@@ -397,11 +407,6 @@ total_capacity_df = pd.DataFrame([
     for tech in m.Tech for year in m.Year
 ])
 
-
-
-# você pode ver:
-# print(incremental_capacity_df.head())
-# print(production_df.head())
 
 
 
@@ -441,14 +446,15 @@ emissions_df = pd.DataFrame(list(emissions.items()), columns=["Year", "Emissions
 import os
 
 # Defina o caminho absoluto do arquivo
-output_path = r"C:\Users\Bruna\OneDrive\DOUTORADO\0.TESE\modelagem\modelo_bru\teste\resultados\resultados_modelo_V5.xlsx"
+output_path = r"C:\Users\Bruna\OneDrive\DOUTORADO\0.TESE\modelagem\modelo_bru\teste\resultados\resultados_modelo_V9.xlsx"
 os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
 
 # Salva o Excel no local desejado
 with pd.ExcelWriter(output_path) as writer:
     incremental_capacity_df.to_excel(writer, sheet_name="Capacidade Incremental")
-    production_df.to_excel(writer, sheet_name="Produção")
+    production_df.to_excel(writer, sheet_name="Produção por Tecnologia")
+    production_total_df.to_excel(writer, sheet_name="Produção Total")
     total_capacity_df.to_excel(writer, sheet_name="Capacidade Total")
     emissions_df.to_excel(writer, sheet_name="Emissões")
     

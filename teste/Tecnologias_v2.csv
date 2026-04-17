@@ -1,0 +1,9 @@
+Route;Description;CAPEX;OPEX;Emission_intensity;Energy_intensity;Lifetime_years;CAPEX_Source;OPEX_Source;Emission_Source;EI_Source;Notes;;;;
+BF-BOF MC;Blast Furnace + BOF with Mineral Coal;471;89;2;24.9;40;ZOTIN 2024 Table 5;ZOTIN 2024 Table 5;[PREENCHER];"OTTO HEBEDA com base em EPE (2018a); PINTO; SZKLO; RATHMANN (2018b) ";Rota tradicional - carvao mineral;;;0.052866242;18.91566265
+BF-BOF CC;Blast Furnace + BOF with Charcoal;471;89;0.7;23.1;40;ZOTIN 2024 Table 5;ZOTIN 2024 Table 5;[PREENCHER];"OTTO HEBEDA com base em EPE (2018a); PINTO; SZKLO; RATHMANN (2018b) ";Rota tradicional - carvao vegetal;;;0.049044586;20.38961039
+EAF;Electric Arc Furnace (Scrap-based);230;46;0.3;9.8;30;ZOTIN 2024 Table 5;ZOTIN 2024 Table 5;[PREENCHER];"OTTO HEBEDA com base em EPE (2018a); PINTO; SZKLO; RATHMANN (2018b) ";Rota tradicional - sucata;;;0.042608696;23.46938776
+DR-NG;Direct Reduction with Natural Gas + EAF;500;50;1.5;17.8;30;Hebeda 2024 Tab.7;Hebeda 2024 Tab.7;[PREENCHER];Hebeda 2024 Tab.7;EI = 16.9 GJ/t NG + 0.9 GJ/t elec;;;0.0356;28.08988764
+DR-H2;Direct Reduction with Hydrogen + EAF;574;80;0.05;13.1;30;Hebeda 2024 Tab.7;Hebeda 2024 Tab.7;[PREENCHER];Hebeda 2024 Tab.7;EI = 13.1 GJ/t eletricidade (eletrolise);;;0.0228223;43.81679389
+SR;Smelting Reduction (Tecnored);640;64;0.5;22.3;30;Hebeda 2024 Tab.7;Hebeda 2024 Tab.7;[PREENCHER];Hebeda 2024 Tab.7;EI = 22 GJ/t CV + 0.3 GJ/t elec. Tecnologia brasileira;;;0.03484375;28.69955157
+BF-BOF-CCS;Blast Furnace + BOF with Carbon Capture;717;88;0.2;20.7;40;Hebeda 2024 Tab.7;Hebeda 2024 Tab.7;[PREENCHER];Hebeda 2024 Tab.7;EI = 3.6 GJ/t NG + 15.9 GJ/t coal + 1.2 GJ/t elec;;;0.028870293;34.63768116
+BRUTESTE;;1500;;;5;;;;;;;;;0.003333333;300

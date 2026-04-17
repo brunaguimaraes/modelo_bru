@@ -1,0 +1,31 @@
+Route;Combustivel;EI_GJ_t;Source
+BF-BOF CC;Carvao vegetal;6.533;EI_BEU (calculated from BEN)
+BF-BOF CC;Eletricidade;4.938;EI_BEU (calculated from BEN)
+BF-BOF CC;GLP;0.052;EI_BEU (calculated from BEN)
+BF-BOF CC;Gas natural;1.735;EI_BEU (calculated from BEN)
+BF-BOF CC;Oleo combustivel;0.058;EI_BEU (calculated from BEN)
+BF-BOF CC;Outras fontes primarias;4.759;EI_BEU (calculated from BEN)
+BF-BOF MC;Carvao metalurgico;3.142;EI_BEU (calculated from BEN)
+BF-BOF MC;Coque de carvao mineral;9.022;EI_BEU (calculated from BEN)
+BF-BOF MC;Eletricidade;2.138;EI_BEU (calculated from BEN)
+BF-BOF MC;Gas natural;0.662;EI_BEU (calculated from BEN)
+BF-BOF MC;Gases cidade;0.851;EI_BEU (calculated from BEN)
+BF-BOF MC;Oleo combustivel;0.001;EI_BEU (calculated from BEN)
+BF-BOF MC;Outras fontes primarias;2.797;EI_BEU (calculated from BEN)
+BF-BOF-CCS;Coque de carvao mineral;15.9;Hebeda 2024 Tab.7
+BF-BOF-CCS;Eletricidade;1.2;Hebeda 2024 Tab.7
+BF-BOF-CCS;Gas natural;3.6;Hebeda 2024 Tab.7
+DR-H2;Eletricidade;13.1;Hebeda 2024 Tab.7
+DR-NG;Eletricidade;0.9;Hebeda 2024 Tab.7
+DR-NG;Gas natural;16.9;Hebeda 2024 Tab.7
+EAF;Carvao metalurgico;0.029;EI_BEU (calculated from BEN)
+EAF;Coque de carvao mineral;0.139;EI_BEU (calculated from BEN)
+EAF;Eletricidade;7.708;EI_BEU (calculated from BEN)
+EAF;Gas natural;1.871;EI_BEU (calculated from BEN)
+EAF;Oleo diesel;0.005;EI_BEU (calculated from BEN)
+EAF;Outras fontes secundarias;0.003;EI_BEU (calculated from BEN)
+Guseiros;Carvao vegetal;17.6096808;EI_BEU (calculated from BEN)
+Guseiros;Eletricidade;0.3851856;EI_BEU (calculated from BEN)
+Guseiros;Oleo diesel;0.0035;EI_BEU (calculated from BEN)
+SR;Carvao vegetal;22;Hebeda 2024 Tab.7
+SR;Eletricidade;0.3;Hebeda 2024 Tab.7
