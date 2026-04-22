@@ -2995,3 +2995,63 @@ print("\n=== MODEL V19 RUN COMPLETE ===")
 #           f"Budget = {CHARCOAL_LIMIT_TJ:.0f} TJ | "
 #           f"Remaining for SR = {CHARCOAL_LIMIT_TJ - charcoal_existing:.0f} TJ | "
 #           f"Max SR = {(CHARCOAL_LIMIT_TJ - charcoal_existing)/22:.0f} kt")
+
+
+#%%
+# === DIAGNOSTIC: Emission constraint feasibility by year ===
+print("\n=== EMISSION vs LIMIT (early years critical) ===")
+print(f"{'Year':>6} {'Target_kt':>10} {'BAU_emiss':>12} {'Limit':>10} {'Margin':>10} {'Innov_avail':>15}")
+print("-" * 70)
+
+for year in model_years:
+    target = production_dict[year]
+    bau_emiss = target * 51860 / 31617  # scale BAU emissions proportionally
+    limit = emission_limit_dict[year]
+    margin = limit - bau_emiss
+    
+    # Check which innovative routes are available
+    avail = []
+    for tech in ['DR-NG', 'DR-H2', 'SR', 'BF-BOF-CCS']:
+        pen = penetration_dict.get((tech, year), 0)
+        if pen > 0:
+            avail.append(f"{tech}({pen:.0%})")
+    
+    avail_str = ", ".join(avail) if avail else "NONE"
+    flag = " <<<" if margin < 0 and not avail else ""
+    
+    print(f"{year:>6} {target:>10,.0f} {bau_emiss:>12,.0f} {limit:>10,.0f} {margin:>10,.0f} {avail_str:>15}{flag}")
+ #%%   
+    # === DIAGNOSTIC: How much can EAF and CC absorb? ===
+print("\n=== EAF AND CC EXPANSION ROOM (early years) ===")
+print(f"{'Year':>6} {'Target':>10} {'MC_BAU':>10} {'EAF_BAU':>10} {'CC_BAU':>10} | {'EAF_max':>10} {'CC_max_16%':>10} {'CC_max_char':>10} | {'Can_shift':>10}")
+print("-" * 115)
+
+for year in model_years[:10]:
+    target = production_dict[year]
+    
+    # BAU production by route (frozen shares)
+    mc_bau = 0.721 * target
+    eaf_bau = 0.231 * target
+    cc_bau = 0.049 * target
+    
+    # EAF max from scrap
+    scrap_available = float(scrap_supply.loc['High', str(year)])
+    eaf_max_scrap = scrap_available / EAF_SCRAP_RATE
+    eaf_room = eaf_max_scrap - eaf_bau
+    
+    # CC max from 16% share
+    cc_max_share = 0.16 * target
+    cc_room_share = cc_max_share - cc_bau
+    
+    # CC max from charcoal (TJ)
+    ei_cc_charcoal = ei_by_route_fuel.get(('BF-BOF CC', 'Carvao vegetal'), 0)
+    if ei_cc_charcoal > 0:
+        cc_max_charcoal = CHARCOAL_LIMIT_TJ / ei_cc_charcoal
+    else:
+        cc_max_charcoal = 999999
+    cc_room_charcoal = cc_max_charcoal - cc_bau
+    
+    # Total room to shift FROM MC
+    can_shift = eaf_room + min(cc_room_share, cc_room_charcoal)
+    
+    print(f"{year:>6} {target:>10,.0f} {mc_bau:>10,.0f} {eaf_bau:>10,.0f} {cc_bau:>10,.0f} | {eaf_max_scrap:>10,.0f} {cc_max_share:>10,.0f} {cc_max_charcoal:>10,.0f} | {can_shift:>10,.0f}")

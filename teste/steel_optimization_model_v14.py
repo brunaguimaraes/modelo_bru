@@ -1138,7 +1138,7 @@ for route in routes_in_plants:
 # Scenario: Constant emissions - maintain 2020 level through 2050
 # emission_2020 = 57016  # Base year emissions according to Brazilian inventory (kt CO2eq) 
 emission_2020 = 51860  # Base year emissions according to my estimates (kt CO2eq)
-emission_2050 = 200060  # Target: maintain constant emissions (no reduction required)
+emission_2050 = 51860  # Target: maintain constant emissions (no reduction required)
 
 year_start, year_end = 2020, 2050
 
@@ -1510,6 +1510,7 @@ m.Plant = Set(initialize=plant_names)
 m.Tech = Set(initialize=list(penetration_innovative.index))
 m.Route = Set(initialize=routes_in_plants)
 
+
 # --- PARAMETERS ---
 production_dict = {y: v for y, v in steel_total_target['Total'].to_dict().items() if y in model_years}
 m.ProductionTarget = Param(m.Year, initialize=production_dict)
@@ -1524,6 +1525,10 @@ plant_to_route = {p: plant_attr[p]["Final_route"] for p in plant_names}
 #==============================================================================
 # SECTION 22: DEFINE MODEL CONSTRAINTS
 #==============================================================================
+# --- HELPER: Total production expression (endogenous) ---
+def total_production_expr(m, year):
+    return sum(m.production[p, year] for p in m.Plant)
+
 
 # --- HELPER FUNCTIONS ---
 def is_plant_active(plant, year):
@@ -1944,60 +1949,60 @@ print(f"    Max SR in 2050: {SR_SHARE_LIMIT * steel_total_target.loc[2050, 'Tota
 
 
 
-# # --- CONSTRAINT L: BF-BOF MC Share Cap ---
-# # BF-BOF MC production cannot exceed its historical share of total production.
-# # This is the direct translation of Otto's formulation:
-# #   production_R1 = (Share_BOF_MC - X5 - X6 - X7 - X8 - X9 - CCS) × Total
-# # In his model, MC automatically shrinks as innovative routes enter.
-# # In our plant-level model, we enforce this as an upper bound.
-# #
-# # Effect: In BAU (no innovative routes), MC grows proportionally with demand
-# # maintaining its 2023 share. In mitigation, MC is displaced by innovative
-# # routes and can shrink below the cap.
-# #
-# # ═══════════════════════════════════════════════════════════════════════════
-# # FUTURE SCENARIO — OPTION B: Remove BF-BOF MC from candidates entirely
-# # ═══════════════════════════════════════════════════════════════════════════
-# # In a more ambitious scenario, BF-BOF MC would NOT be available for new
-# # construction. Existing MC plants operate until retirement (retrofitdate)
-# # and are NOT replaced. All new capacity comes from other routes.
-# #
-# # To implement Option B:
-# #   1. In Section 15, change candidate_routes to exclude 'BF-BOF MC':
-# #      candidate_routes = ['BF-BOF CC', 'EAF', 'DR-NG', 'DR-H2', 'SR', 'BF-BOF-CCS']
-# #   2. Remove or skip this Constraint L (it becomes redundant)
-# #
-# # Option B represents a "phase-out" scenario where no new coal-based
-# # steelmaking is built. This would show the cost of accelerated
-# # decarbonization and can be compared against Option A (the current scenario)
-# # to quantify the additional investment needed for a coal-free steel industry.
-# # ═══════════════════════════════════════════════════════════════════════════
+# --- CONSTRAINT L: BF-BOF MC Share Cap ---
+# BF-BOF MC production cannot exceed its historical share of total production.
+# This is the direct translation of Otto's formulation:
+#   production_R1 = (Share_BOF_MC - X5 - X6 - X7 - X8 - X9 - CCS) × Total
+# In his model, MC automatically shrinks as innovative routes enter.
+# In our plant-level model, we enforce this as an upper bound.
+#
+# Effect: In BAU (no innovative routes), MC grows proportionally with demand
+# maintaining its 2023 share. In mitigation, MC is displaced by innovative
+# routes and can shrink below the cap.
+#
+# ═══════════════════════════════════════════════════════════════════════════
+# FUTURE SCENARIO — OPTION B: Remove BF-BOF MC from candidates entirely
+# ═══════════════════════════════════════════════════════════════════════════
+# In a more ambitious scenario, BF-BOF MC would NOT be available for new
+# construction. Existing MC plants operate until retirement (retrofitdate)
+# and are NOT replaced. All new capacity comes from other routes.
+#
+# To implement Option B:
+#   1. In Section 15, change candidate_routes to exclude 'BF-BOF MC':
+#      candidate_routes = ['BF-BOF CC', 'EAF', 'DR-NG', 'DR-H2', 'SR', 'BF-BOF-CCS']
+#   2. Remove or skip this Constraint L (it becomes redundant)
+#
+# Option B represents a "phase-out" scenario where no new coal-based
+# steelmaking is built. This would show the cost of accelerated
+# decarbonization and can be compared against Option A (the current scenario)
+# to quantify the additional investment needed for a coal-free steel industry.
+# ═══════════════════════════════════════════════════════════════════════════
  
-# # Calculate base share from calibrated data (Section 13)
-# bau_mc_production = plants_unified[
-#     plants_unified['Final_route'] == 'BF-BOF MC'
-# ]['Production_2023_final'].sum()
+# Calculate base share from calibrated data (Section 13)
+bau_mc_production = plants_unified[
+    plants_unified['Final_route'] == 'BF-BOF MC'
+]['Production_2023_final'].sum()
  
-# bau_total = plants_unified['Production_2023_final'].sum()
-# BASE_SHARE_MC = bau_mc_production / bau_total
+bau_total = plants_unified['Production_2023_final'].sum()
+BASE_SHARE_MC = bau_mc_production / bau_total
  
-# print(f"\n  BF-BOF MC base share (2023, calibrated): {BASE_SHARE_MC:.3f} ({BASE_SHARE_MC:.1%})")
+print(f"\n  BF-BOF MC base share (2023, calibrated): {BASE_SHARE_MC:.3f} ({BASE_SHARE_MC:.1%})")
  
-# def mc_share_cap_rule(m, year):
-#     """BF-BOF MC production cannot exceed its 2023 historical share"""
-#     total_mc = sum(
-#         m.production[p, year]
-#         for p in m.Plant
-#         if plant_to_route[p] == 'BF-BOF MC'
-#     )
-#     return total_mc <= BASE_SHARE_MC * m.ProductionTarget[year]
+def mc_share_cap_rule(m, year):
+    """BF-BOF MC production cannot exceed its 2023 historical share"""
+    total_mc = sum(
+        m.production[p, year]
+        for p in m.Plant
+        if plant_to_route[p] == 'BF-BOF MC'
+    )
+    return total_mc <= BASE_SHARE_MC * m.ProductionTarget[year]
  
-# m.MCShareCap = Constraint(m.Year, rule=mc_share_cap_rule)
+m.MCShareCap = Constraint(m.Year, rule=mc_share_cap_rule)
  
-# print(f"  Constraint L added: BF-BOF MC <= {BASE_SHARE_MC:.1%} of total production")
-# print(f"    Max BF-BOF MC in 2050: {BASE_SHARE_MC * steel_total_target.loc[2050, 'Total']:.0f} kt")
-# print(f"    (Option A — Otto's approach: MC share frozen at 2023 level)")
-# print(f"    (Option B — phase-out scenario: registered for future implementation)")
+print(f"  Constraint L added: BF-BOF MC <= {BASE_SHARE_MC:.1%} of total production")
+print(f"    Max BF-BOF MC in 2050: {BASE_SHARE_MC * steel_total_target.loc[2050, 'Total']:.0f} kt")
+print(f"    (Option A — Otto's approach: MC share frozen at 2023 level)")
+print(f"    (Option B — phase-out scenario: registered for future implementation)")
  
 
 #%% model
@@ -2771,6 +2776,13 @@ plt.savefig('energy_consumption.png', dpi=150)
 plt.show()
 
 #==============================================================================
+#zerando negativos
+#==============================================================================
+
+# Before the area plot, add:
+energy_pivot = energy_pivot.clip(lower=0)
+
+#==============================================================================
 # SECTION 30: EXPORT RESULTS TO EXCEL
 #==============================================================================
 
@@ -2993,3 +3005,50 @@ print("\n=== MODEL V19 RUN COMPLETE ===")
 #           f"Budget = {CHARCOAL_LIMIT_TJ:.0f} TJ | "
 #           f"Remaining for SR = {CHARCOAL_LIMIT_TJ - charcoal_existing:.0f} TJ | "
 #           f"Max SR = {(CHARCOAL_LIMIT_TJ - charcoal_existing)/22:.0f} kt")
+
+
+
+#%%
+BASE_SHARE_MC = plants_unified[plants_unified['Final_route'] == 'BF-BOF MC']['Production_2023_final'].sum() / plants_unified['Production_2023_final'].sum()
+print(f"BASE_SHARE_MC = {BASE_SHARE_MC:.3f} ({BASE_SHARE_MC:.1%})")
+
+# === DIAGNOSTIC: Can non-MC routes fill the gap? ===
+print("\n=== CONSTRAINT L FEASIBILITY DIAGNOSTIC ===")
+print(f"{'Year':>6} {'Target':>10} {'MC_max':>10} {'Gap':>10} {'CC_cap':>10} {'EAF_cap':>10} {'Innov_cap':>10} {'Available':>10} {'Feasible':>10}")
+print("-" * 100)
+
+for year in range(2023, 2051, 1):
+    target = production_dict[year]
+    mc_max = BASE_SHARE_MC * target
+    gap = target - mc_max  # what non-MC routes must cover
+    
+    # BF-BOF CC: limited by Constraint J (16%) and charcoal
+    cc_max = 0.16 * target
+    
+    # EAF: limited by scrap
+    scrap_available = float(scrap_supply.loc['High', str(year)])
+    eaf_max = scrap_available / EAF_SCRAP_RATE
+    
+    # Innovative: limited by Constraint I (70.8% share)
+    innov_max = BASE_SHARE_BOF_MC * target
+    
+    # Total available from non-MC
+    available = cc_max + eaf_max  # + innov_max but they also displace MC
+    
+    feasible = "OK" if available >= gap else f"SHORT by {gap - available:,.0f}"
+    
+    print(f"{year:>6} {target:>10,.0f} {mc_max:>10,.0f} {gap:>10,.0f} {cc_max:>10,.0f} {eaf_max:>10,.0f} {innov_max:>10,.0f} {available:>10,.0f} {feasible:>10}")
+    
+#%%
+print("\n=== PENETRATION LIMITS CHECK ===")
+print(f"Technologies in penetration file: {list(penetration_innovative.index)}")
+print()
+
+for tech in penetration_innovative.index:
+    print(f"\n  {tech}:")
+    for year in [2023, 2030, 2040, 2050]:
+        if year in penetration_innovative.columns:
+            val = penetration_innovative.loc[tech, year]
+            max_prod = val * production_dict[year]
+            print(f"    {year}: {val:.3f} ({val:.1%}) → max {max_prod:,.0f} kt")
+   
